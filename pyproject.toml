@@ -1,0 +1,81 @@
+[project]
+name = "py-etp-client"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Valentin Gauthier", email = "valentin.gauthier@geosiris.com"}
+]
+license = {text = "Apache License 2.0"}
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+# dependencies = [
+#     {package = "websocket-client", version = "^1.0.0"},
+#     {package = "energyml-resqml2-2", version = "^1.12.0"},
+#     {package = "energyml-resqml2-0-1", version = "^1.12.0"},
+#     {package = "energyml-witsml2-0", version = "^1.12.0"},
+#     {package = "energyml-witsml2-1", version = "^1.12.0"},
+#     {package = "energyml-prodml2-2", version = "^1.12.0"},
+#     {package = "energyml-utils", version = "^1.8.3"},
+# ]
+
+
+[tool.poetry.dependencies]
+etptypes = "=1.0.4"
+etpproto = "^1.0.6"
+websocket-client="^1.0.0"
+energyml-resqml2-2="^1.12.0"
+energyml-resqml2-0-1="^1.12.0"
+energyml-witsml2-0="^1.12.0"
+energyml-witsml2-1="^1.12.0"
+energyml-prodml2-2="^1.12.0"
+energyml-utils="^1.8.3"
+dotenv = "^0.9.9"
+pyyaml = "^6.0.2"
+numpy = "^2.2.4"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+flake8 = "^7.1.2"
+black = "^25.1.0"
+pytest-cov = "^6.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.black]
+line-length = 119
+target-version = ["py39"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+
+[tool.poetry.scripts]
+client = "py_etp_client.main:main"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "pep440"
+format-jinja = """
+    {%- if distance == 0 -%}
+        {{ serialize_pep440(base, stage, revision) }}
+    {%- elif revision is not none -%}
+        {{ serialize_pep440(base, stage, revision + 1, dev=distance) }}
+    {%- else -%}
+        {{ serialize_pep440(bump_version(base), stage, revision, dev=distance) }}
+    {%- endif -%}
+"""

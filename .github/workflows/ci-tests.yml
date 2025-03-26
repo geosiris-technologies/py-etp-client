@@ -1,0 +1,85 @@
+##
+## Copyright (c) 2022-2023 Geosiris.
+## SPDX-License-Identifier: Apache-2.0
+##
+name: Test and Lint
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  test:
+    name: Run Pytest with Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: 💾 Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: 📦 Install poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: '2.1.1'
+
+      - name: 📥 Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: 🧪 Run Pytest with Coverage
+        run: |
+          poetry run pytest --cov=py_etp_client --cov-report=term-missing --cov-report=xml 
+        # --cov-fail-under=80
+        env:
+          PYTHONWARNINGS: "ignore::DeprecationWarning"
+
+      - name: 📤 Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  lint:
+    name: Run Flake8 Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: 📦 Install poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: '2.1.1'
+
+      - name: 📥 Install dependencies (including dev)
+        run: poetry install --no-interaction --no-root
+
+      - name: 🛠️ Run Flake8
+        run: poetry run flake8 py_etp_client --count --show-source --statistics --output-file flake8-report.txt
+
+      - name: 📤 Upload Flake8 Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake8-report
+          path: flake8-report.txt
