@@ -34,8 +34,13 @@ jobs:
           restore-keys: |
             poetry-${{ runner.os }}-
 
-      - name: 📦 Install Poetry
-        run: pip install poetry poetry-dynamic-versioning
+      - name: 📦 Install poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: '2.1.1'
+
+      - name: 📦 Install poetry-dynamic-versioning
+        run: poetry add -D poetry-dynamic-versioning
 
       - name: 📥 Install dependencies
         run: poetry install --no-interaction --no-root
