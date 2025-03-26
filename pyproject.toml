@@ -62,10 +62,10 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if distance == 0 -%}
-        {{ serialize_pep440(base, stage, revision) }}
+        {{ serialize_pep440(base | remove_prefix('v'), stage, revision) }}
     {%- elif revision is not none -%}
-        {{ serialize_pep440(base, stage, revision + 1, dev=distance) }}
+        {{ serialize_pep440(base | remove_prefix('v'), stage, revision + 1, dev=distance) }}
     {%- else -%}
-        {{ serialize_pep440(bump_version(base), stage, revision, dev=distance) }}
+        {{ serialize_pep440(bump_version(base | remove_prefix('v')), stage, revision, dev=distance) }}
     {%- endif -%}
 """
