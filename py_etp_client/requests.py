@@ -299,7 +299,7 @@ def _create_data_object(
 
 def get_array_class_from_dtype(
     dtype: str,
-) -> ArrayOfInt | ArrayOfLong | ArrayOfBoolean | ArrayOfFloat | ArrayOfDouble | ArrayOfBytes | ArrayOfString:
+) -> Union[ArrayOfInt, ArrayOfLong, ArrayOfBoolean, ArrayOfFloat, ArrayOfDouble, ArrayOfBytes, ArrayOfString]:
     dtype_str = str(dtype)
     print("dtype_str", dtype_str)
     if dtype_str.startswith("long") or dtype_str.startswith("int64"):
