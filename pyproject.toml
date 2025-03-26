@@ -71,14 +71,14 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if distance == 0 -%}
-        {%- if base is defined and base | remove_prefix('v') %}
-            {{ serialize_pep440(base | remove_prefix('v'), stage, revision) }}
+        {%- if base is defined and base %}
+            {{ serialize_pep440(base, stage, revision) }}
         {%- else %}
             {{ serialize_pep440(base, stage, revision) }}
         {%- endif %}
     {%- elif revision is not none -%}
-        {{ serialize_pep440(base | remove_prefix('v'), stage, revision + 1) }}
+        {{ serialize_pep440(base, stage, revision + 1) }}
     {%- else %}
-        {{ serialize_pep440(bump_version(base | remove_prefix('v')), stage, revision) }}  # Similarly, avoid using local version here
+        {{ serialize_pep440(bump_version(base), stage, revision) }}  # Similarly, avoid using local version here
     {%- endif %}
 """
