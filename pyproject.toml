@@ -1,6 +1,7 @@
 [project]
 name = "py-etp-client"
-version = "0.0.0"
+
+dynamic = ["version"]
 description = "A python client to interact with the ETP server in with a websocket connection"
 authors = [
     {name = "Valentin Gauthier", email = "valentin.gauthier@geosiris.com"}
@@ -8,6 +9,9 @@ authors = [
 license = {text = "Apache License 2.0"}
 readme = "README.md"
 requires-python = ">=3.9,<4.0"
+
+[tool.poetry]
+version = "0.0.0"
 
 [tool.poetry.dependencies]
 etptypes = "=1.0.4"
@@ -29,6 +33,11 @@ pytest = "^8.3.5"
 flake8 = "^7.1.2"
 black = "^25.1.0"
 pytest-cov = "^6.0.0"
+poetry-dynamic-versioning = "^1.8.1"
+jinja2 = "^3.1.6"
+
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -62,10 +71,10 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if distance == 0 -%}
-        {{ serialize_pep440(base | remove_prefix('v'), stage, revision) }}
+        {{ serialize_pep440(base, stage, revision) }}
     {%- elif revision is not none -%}
-        {{ serialize_pep440(base | remove_prefix('v'), stage, revision + 1, dev=distance) }}
+        {{ serialize_pep440(base, stage, revision + 1, dev=distance, metadata=[commit]) }}
     {%- else -%}
-        {{ serialize_pep440(bump_version(base | remove_prefix('v')), stage, revision, dev=distance) }}
+        {{ serialize_pep440(bump_version(base), stage, revision, dev=distance, metadata=[commit]) }}
     {%- endif -%}
 """

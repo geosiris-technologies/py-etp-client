@@ -361,6 +361,21 @@ files = [
 python-dotenv = "*"
 
 [[package]]
+name = "dunamai"
+version = "1.23.1"
+description = "Dynamic version generation"
+optional = false
+python-versions = ">=3.5"
+groups = ["dev"]
+files = [
+    {file = "dunamai-1.23.1-py3-none-any.whl", hash = "sha256:2611b0b9105a5797149ef82f4968a01dd912bdac857d49fc06856a4cfa58cf78"},
+    {file = "dunamai-1.23.1.tar.gz", hash = "sha256:0b5712fc63bfb235263d912bfc5eb84590ba2201bb737268d25a5dbad7085489"},
+]
+
+[package.dependencies]
+packaging = ">=20.9"
+
+[[package]]
 name = "energyml-common2-0"
 version = "1.12.0"
 description = "energyml_common2_0 types"
@@ -651,7 +666,7 @@ version = "3.1.6"
 description = "A very fast and expressive template engine."
 optional = false
 python-versions = ">=3.7"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"},
     {file = "jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"},
@@ -824,7 +839,7 @@ version = "3.0.2"
 description = "Safely add untrusted strings to HTML/XML markup."
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "MarkupSafe-3.0.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:7e94c425039cde14257288fd61dcfb01963e658efbc0ff54f5306b06054700f8"},
     {file = "MarkupSafe-3.0.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:9e2d922824181480953426608b81967de705c3cef4d1af983af849d7bd619158"},
@@ -1029,6 +1044,26 @@ files = [
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
+
+[[package]]
+name = "poetry-dynamic-versioning"
+version = "1.8.1"
+description = "Plugin for Poetry to enable dynamic versioning based on VCS tags"
+optional = false
+python-versions = "<4.0,>=3.7"
+groups = ["dev"]
+files = [
+    {file = "poetry_dynamic_versioning-1.8.1-py3-none-any.whl", hash = "sha256:831d940889d37ee50aeee167d07a03e1bd1401e6ff8bd6bd03ea7b0da6c53235"},
+    {file = "poetry_dynamic_versioning-1.8.1.tar.gz", hash = "sha256:35b2148e1d08ba30f38c3dd28518db1e2ff9152391265963af636ce29f987d59"},
+]
+
+[package.dependencies]
+dunamai = ">=1.23.0,<2.0.0"
+jinja2 = ">=2.11.1,<4"
+tomlkit = ">=0.4"
+
+[package.extras]
+plugin = ["poetry (>=1.2.0)"]
 
 [[package]]
 name = "pycodestyle"
@@ -1346,6 +1381,18 @@ files = [
 ]
 
 [[package]]
+name = "tomlkit"
+version = "0.13.2"
+description = "Style preserving TOML library"
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+files = [
+    {file = "tomlkit-0.13.2-py3-none-any.whl", hash = "sha256:7a974427f6e119197f670fbbbeae7bef749a6c14e793db934baefc1b5f03efde"},
+    {file = "tomlkit-0.13.2.tar.gz", hash = "sha256:fff5fe59a87295b278abd31bec92c15d9bc4a06885ab12bcea52c71119392e79"},
+]
+
+[[package]]
 name = "toposort"
 version = "1.10"
 description = "Implements a topological sort algorithm."
@@ -1460,4 +1507,4 @@ test = ["pre-commit", "pytest", "pytest-benchmark", "pytest-cov"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "41e9b14f2d66b1f54f23595e5d9f76c8272816e3baf042257a5f3f21c15caec4"
+content-hash = "7c906a697cdd2615217291a821ef06c4767eef4d16ac6fafabf7aa07dab489bf"
