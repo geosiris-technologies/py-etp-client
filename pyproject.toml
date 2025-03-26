@@ -1,6 +1,6 @@
 [project]
 name = "py-etp-client"
-version = "0.1.0"
+version = "0.0.0"
 description = "A python client to interact with the ETP server in with a websocket connection"
 authors = [
     {name = "Valentin Gauthier", email = "valentin.gauthier@geosiris.com"}
