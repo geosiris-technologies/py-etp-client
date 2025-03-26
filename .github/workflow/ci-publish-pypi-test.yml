@@ -1,0 +1,52 @@
+##
+## Copyright (c) 2022-2023 Geosiris.
+## SPDX-License-Identifier: Apache-2.0
+##
+---
+
+name: Publish test-pypi
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-publish:
+    name: Build and Publish to TestPyPI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: 💾 Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: 📦 Install Poetry
+        run: pip install poetry poetry-dynamic-versioning
+
+      - name: 📥 Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: 🔢 Enable Poetry Dynamic Versioning
+        run: poetry dynamic-versioning
+
+      - name: 🛠️ Build the package
+        run: poetry build
+
+      - name: 🚀 Publish to PyPI
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
+        run: poetry publish --no-interaction --repository testpypi --username ${{ secrets.POETRY_PYPI_TOKEN_USERNAME}} --password ${{ secrets.POETRY_PYPI_TOKEN_PASSWORD}}
