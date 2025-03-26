@@ -71,14 +71,11 @@ vcs = "git"
 style = "pep440"
 format-jinja = """
     {%- if distance == 0 -%}
-        {%- if base is defined and base %}
-            {{ serialize_pep440(base, stage, revision) }}
-        {%- else %}
-            {{ serialize_pep440(base, stage, revision) }}
-        {%- endif %}
+        {{ serialize_pep440(base, stage, revision) }}
     {%- elif revision is not none -%}
-        {{ serialize_pep440(base, stage, revision + 1) }}
-    {%- else %}
-        {{ serialize_pep440(bump_version(base), stage, revision) }}  # Similarly, avoid using local version here
-    {%- endif %}
+        {{ serialize_pep440(base, stage, revision + 1, dev=distance) }}
+    {%- else -%}
+        {{ serialize_pep440(bump_version(base), stage, revision, dev=distance) }}
+    {%- endif -%}
 """
+# , metadata=[commit]
