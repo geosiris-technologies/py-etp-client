@@ -37,7 +37,7 @@ jobs:
         run: pip install poetry
 
       - name: 📥 Install dependencies
-        run: poetry install --with dev --no-interaction --no-root
+        run: poetry install --no-interaction --no-root
 
       - name: 🧪 Run Pytest with Coverage
         run: |
@@ -68,7 +68,7 @@ jobs:
         run: pip install poetry
 
       - name: 📥 Install dependencies (including dev)
-        run: poetry install --with dev --no-interaction --no-root
+        run: poetry install --no-interaction --no-root
 
       - name: 🛠️ Run Flake8
         run: poetry run flake8 your_module --count --show-source --statistics --output-file flake8-report.txt

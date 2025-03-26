@@ -302,16 +302,16 @@ def get_array_class_from_dtype(
 ) -> ArrayOfInt | ArrayOfLong | ArrayOfBoolean | ArrayOfFloat | ArrayOfDouble | ArrayOfBytes | ArrayOfString:
     dtype_str = str(dtype)
     print("dtype_str", dtype_str)
-    if dtype_str.startswith("int") or dtype_str.startswith("unsign") or dtype_str.startswith("uint"):
-        return ArrayOfInt
-    elif dtype_str.startswith("long"):
+    if dtype_str.startswith("long") or dtype_str.startswith("int64"):
         return ArrayOfLong
+    elif dtype_str.startswith("int") or dtype_str.startswith("unsign") or dtype_str.startswith("uint"):
+        return ArrayOfInt
     elif dtype_str.startswith("bool"):
         return ArrayOfBoolean
+    elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
+        return ArrayOfDouble
     elif dtype_str.startswith("float"):
         return ArrayOfFloat
-    elif dtype_str.startswith("double"):
-        return ArrayOfDouble
     elif dtype_str.startswith("bytes") or dtype_str.startswith("|S"):
         return ArrayOfBytes
     elif dtype_str.startswith("str") or dtype_str.startswith("<U"):
