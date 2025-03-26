@@ -45,11 +45,11 @@ jobs:
       - name: 📥 Install dependencies
         run: poetry install --no-interaction --no-root
 
-      - name: 🛠️ Build the package
-        run: poetry build
+      # - name: 🛠️ Build the package
+      #   run: poetry build
 
       - name: 🚀 Publish to PyPI
         run: 
           poetry config repositories.test-pypi https://test.pypi.org/legacy/
           poetry config pypi-token.test-pypi ${{ secrets.POETRY_PYPI_TEST_TOKEN_VALUE }}
-          poetry publish --repository test-pypi
+          poetry publish --build --repository test-pypi
