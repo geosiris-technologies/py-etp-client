@@ -34,11 +34,11 @@ def test_0():
     print_pdo = False
     print_gda = False
     print_pda_0 = False
-    print_pda = True
+    print_pda = False
 
     logging.getLogger().setLevel(logging.INFO)
     config = ETPConfig()
-    # logging.info(config.to_json())
+    logging.info(config.to_json())
 
     @ETPConnection.on(CommunicationProtocol.DATASPACE)
     class newDataspaceHandler(DataspaceHandler):
@@ -57,7 +57,7 @@ def test_0():
     client = ETPClient(
         url=config.URL,
         spec=ETPConnection(connection_type=ConnectionType.CLIENT),
-        # access_token=config.ACCESS_TOKEN,
+        access_token=config.ACCESS_TOKEN,
         username=config.USERNAME,
         password=config.PASSWORD,
         headers=config.ADDITIONAL_HEADERS,
@@ -70,6 +70,7 @@ def test_0():
         sleep(0.25)
     if not client.is_connected():
         print("The ETP session could not be established in 5 seconds.")
+        raise Exception("Not connected")
     else:
         print("Now connected to ETP Server")
 
@@ -215,7 +216,7 @@ async def simple_async():
     client = ETPClient(
         url=config.URL,
         spec=ETPConnection(connection_type=ConnectionType.CLIENT),
-        # access_token=config.ACCESS_TOKEN,
+        access_token=config.ACCESS_TOKEN,
         username=config.USERNAME,
         password=config.PASSWORD,
         headers=config.ADDITIONAL_HEADERS,

@@ -124,6 +124,7 @@ class ETPSimpleClient:
         """Runs the WebSocket connection in a separate thread."""
         self.ws = websocket.WebSocketApp(
             self.url,
+            subprotocols=[ETPConnection.SUB_PROTOCOL],
             header=self.headers,
             on_open=self.on_open,
             on_message=self.on_message,
