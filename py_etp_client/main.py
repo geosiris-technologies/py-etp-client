@@ -33,6 +33,7 @@ def test_0():
     print_put_del_ds = False
     print_pdo = False
     print_gda = False
+    print_pda_0 = False
     print_pda = True
 
     logging.getLogger().setLevel(logging.INFO)
@@ -161,7 +162,7 @@ def test_0():
         )
         print(response)
 
-    if print_pda:
+    if print_pda_0:
         uuid = "ffaabbaa-efac-42d5-ae32-bf65f8dc693e"
         array = np.array([[1, 2, 3], [4, 5, 6]])
         response = client.put_data_array(
@@ -178,6 +179,13 @@ def test_0():
         response = client.get_data_array(
             "eml:///dataspace('test-workflow-aws')",
             f"/test/{uuid}",
+        )
+        print(response)
+
+    if print_pda:
+        response = client.get_data_array(
+            "eml:///dataspace('ilab')/resqml20.obj_PointSetRepresentation(e3219d2a-e482-4714-86d5-c3a5a2fa3727)",
+            "/resqml20/e3219d2a-e482-4714-86d5-c3a5a2fa3727/points_patch0",
         )
         print(response)
 
@@ -249,5 +257,5 @@ if __name__ == "__main__":
         # level=logging.INFO,
         level=logging.DEBUG,
     )
-    # test_0()
-    test_async()
+    test_0()
+    # test_async()

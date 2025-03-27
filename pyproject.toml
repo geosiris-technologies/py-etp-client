@@ -1,7 +1,6 @@
 [project]
 dynamic = ["version"]
 name = "py-etp-client"
-
 description = "A python client to interact with the ETP server in with a websocket connection"
 authors = [
     {name = "Valentin Gauthier", email = "valentin.gauthier@geosiris.com"}

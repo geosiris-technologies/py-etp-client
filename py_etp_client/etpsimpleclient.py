@@ -35,7 +35,7 @@ class ETPSimpleClient:
 
     def __init__(
         self,
-        url,
+        url: str,
         spec: Optional[ETPConnection],
         access_token: Optional[str] = None,
         username: Optional[str] = None,
@@ -45,6 +45,12 @@ class ETPSimpleClient:
         req_session: Optional[RequestSession] = None,
     ):
         self.url = url
+        if not self.url.startswith("ws"):
+            if self.url.lower().startswith("http"):
+                self.url = "ws" + self.url[4:]
+            else:
+                self.url = "wss://" + self.url
+
         self.spec = spec
         self.access_token = access_token
         self.headers = {}
@@ -174,7 +180,10 @@ class ETPSimpleClient:
             with self.lock:
                 if recieved.header.correlation_id in self.pending_requests:
                     event, _ = self.pending_requests[recieved.header.correlation_id]
-                    self.pending_requests[recieved.header.correlation_id] = (event, self.recieved_msg_dict[recieved.header.correlation_id])
+                    self.pending_requests[recieved.header.correlation_id] = (
+                        event,
+                        self.recieved_msg_dict[recieved.header.correlation_id],
+                    )
                     event.set()
         asyncio.run(handle_msg(self.spec, self, message))
 
