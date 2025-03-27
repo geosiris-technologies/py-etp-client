@@ -28,6 +28,49 @@ from etptypes.energistics.etp.v12.datatypes.message_header import (
 from py_etp_client.requests import get_dataspaces
 
 
+def del_dataspaces():
+    logging.getLogger().setLevel(logging.INFO)
+    config = ETPConfig()
+    logging.info(config.to_json())
+
+    @ETPConnection.on(CommunicationProtocol.DATASPACE)
+    class newDataspaceHandler(DataspaceHandler):
+        async def on_get_dataspaces_response(
+            self,
+            msg: GetDataspacesResponse,
+            msg_header: MessageHeader,
+            client_info: Union[None, ClientInfo] = None,
+        ) -> AsyncGenerator[bytes, None]:
+            for dataspace in msg.dataspaces:
+                logging.info("==> %s", dataspace.uri)
+            yield
+
+    # ================================================
+
+    client = ETPClient(
+        url=config.URL,
+        spec=ETPConnection(connection_type=ConnectionType.CLIENT),
+        access_token=config.ACCESS_TOKEN,
+        username=config.USERNAME,
+        password=config.PASSWORD,
+        headers=config.ADDITIONAL_HEADERS,
+        verify=False,
+    )
+    client.start()
+
+    start_time = perf_counter()
+    while not client.is_connected() and perf_counter() - start_time < 5:
+        sleep(0.25)
+    if not client.is_connected():
+        print("The ETP session could not be established in 5 seconds.")
+        raise Exception("Not connected")
+    else:
+        print("Now connected to ETP Server")
+
+    client.delete_dataspace(["test-workflow-new", "test-workflow-aws42", "test-workflow-aws"])
+    client.close()
+
+
 def test_0():
     print_gdo = False
     print_put_del_ds = False

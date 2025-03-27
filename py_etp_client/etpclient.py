@@ -23,6 +23,7 @@ from py_etp_client import (
     DeleteDataspacesResponse,
     PutDataObjects,
     PutDataObjectsResponse,
+    GetDataObjectsResponse,
     GetDataArrays,
     DataArrayIdentifier,
     GetDataArraysResponse,
@@ -189,15 +190,20 @@ class ETPClient(ETPSimpleClient):
         data_obj = {}
 
         for gdor in gdor_msg_list:
-            data_obj.update({k: v.data for k, v in gdor.body.data_objects.items()})
+            if isinstance(gdor.body, GetDataObjectsResponse):
+                data_obj.update({k: v.data for k, v in gdor.body.data_objects.items()})
+            else:
+                logging.error("Error: %s", gdor.body)
 
         res = None
-        if isinstance(uris, str):
-            res = data_obj["0"]
-        elif isinstance(uris, dict):
-            res = {k: data_obj[k] for k in uris.keys()}
-        elif isinstance(uris, list):
-            res = [data_obj[str(i)] for i in range(len(uris))]
+        if len(data_obj) > 0:
+            if isinstance(uris, str):
+                res = data_obj["0"]
+            elif isinstance(uris, dict):
+                res = {k: data_obj[k] for k in uris.keys()}
+            elif isinstance(uris, list):
+                res = [data_obj[str(i)] for i in range(len(uris))]
+
         return res
 
     def put_data_object_str(self, obj_content: str, dataspace_name: str, timeout: int = 5) -> Dict[str, Any]:
