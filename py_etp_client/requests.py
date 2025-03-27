@@ -275,7 +275,6 @@ def _create_data_object(
             obj = read_energyml_json_str(obj_as_str)[0]
             format = "json"
     elif obj_as_str is None:
-        obj_as_str = obj.to_xml()
         if format == "json":
             obj_as_str = serialize_json(obj)
         else:

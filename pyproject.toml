@@ -1,7 +1,6 @@
 [project]
 dynamic = ["version"]
 name = "py-etp-client"
-
 description = "A python client to interact with the ETP server in with a websocket connection"
 authors = [
     {name = "Valentin Gauthier", email = "valentin.gauthier@geosiris.com"}
@@ -13,9 +12,14 @@ requires-python = ">=3.9,<4.0"
 [tool.poetry]
 version = "0.0.0"
 
+[[tool.poetry.source]]
+name = "test-pypi"
+url = "https://test.pypi.org/simple/"
+priority = "explicit"
+
 [tool.poetry.dependencies]
 etptypes = "=1.0.4"
-etpproto = "^1.0.6"
+etpproto = {version = "^1.0.5", allow-prereleases = true, source = "test-pypi"}
 websocket-client="^1.0.0"
 energyml-resqml2-2="^1.12.0"
 energyml-resqml2-0-1="^1.12.0"
