@@ -1,6 +1,7 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 # Example Usage
+import asyncio
 import logging
 from typing import AsyncGenerator, Union
 from time import sleep, perf_counter
@@ -27,7 +28,7 @@ from etptypes.energistics.etp.v12.datatypes.message_header import (
 from py_etp_client.requests import get_dataspaces
 
 
-if __name__ == "__main__":
+def test_0():
     print_gdo = False
     print_put_del_ds = False
     print_pdo = False
@@ -55,6 +56,7 @@ if __name__ == "__main__":
     client = ETPClient(
         url=config.URL,
         spec=ETPConnection(connection_type=ConnectionType.CLIENT),
+        # access_token=config.ACCESS_TOKEN,
         username=config.USERNAME,
         password=config.PASSWORD,
         headers=config.ADDITIONAL_HEADERS,
@@ -180,3 +182,72 @@ if __name__ == "__main__":
         print(response)
 
     client.stop()
+
+
+async def simple_async():
+
+    logging.getLogger().setLevel(logging.INFO)
+    config = ETPConfig()
+    # logging.info(config.to_json())
+
+    @ETPConnection.on(CommunicationProtocol.DATASPACE)
+    class newDataspaceHandler(DataspaceHandler):
+        async def on_get_dataspaces_response(
+            self,
+            msg: GetDataspacesResponse,
+            msg_header: MessageHeader,
+            client_info: Union[None, ClientInfo] = None,
+        ) -> AsyncGenerator[bytes, None]:
+            for dataspace in msg.dataspaces:
+                logging.info("==> %s", dataspace.uri)
+            yield
+
+    # ================================================
+
+    client = ETPClient(
+        url=config.URL,
+        spec=ETPConnection(connection_type=ConnectionType.CLIENT),
+        # access_token=config.ACCESS_TOKEN,
+        username=config.USERNAME,
+        password=config.PASSWORD,
+        headers=config.ADDITIONAL_HEADERS,
+        verify=False,
+    )
+    client.start()
+
+    start_time = perf_counter()
+    while not client.is_connected() and perf_counter() - start_time < 5:
+        sleep(0.25)
+    if not client.is_connected():
+        logging.info("The ETP session could not be established in 5 seconds.")
+    else:
+        logging.info("Now connected to ETP Server")
+
+    try:
+        response = client.get_dataspaces()
+        logging.info(f"Response received: {response}")
+    except TimeoutError as e:
+        logging.info(f"Error: {e}")
+
+
+def test_async():
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # 'RuntimeError: There is no current event loop...'
+        loop = None
+
+    if loop and loop.is_running():  # for case that an asyncio loop currently exists
+        logging.info("Async event loop already running. Adding coroutine to the event loop.")
+        loop.create_task(simple_async())
+    else:
+        asyncio.run(simple_async())
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        filename="etpclient.log",
+        # level=logging.INFO,
+        level=logging.DEBUG,
+    )
+    # test_0()
+    test_async()

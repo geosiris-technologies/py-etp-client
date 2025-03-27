@@ -159,7 +159,7 @@ class ETPClient(ETPSimpleClient):
     # /____/\__/\____/_/   \___/
 
     def get_data_object(
-        self, uris: Union[str, Dict, List], format: str = "xml", timeout: Optional[int] = 5
+        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: Optional[int] = 5
     ) -> Union[Dict[str, str], List[str], str]:
         """Get data object from the server.
 
@@ -185,7 +185,7 @@ class ETPClient(ETPSimpleClient):
         else:
             raise ValueError("uri must be a string, a dict or a list of strings")
 
-        gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format_=format), timeout=timeout)
+        gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format_=format_), timeout=timeout)
         data_obj = {}
 
         for gdor in gdor_msg_list:
