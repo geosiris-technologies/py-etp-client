@@ -15,3 +15,55 @@ SPDX-License-Identifier: Apache-2.0
 
 
 An etp client python module to make an etp websocket connexion
+
+
+## Example of use : 
+
+Check "example" folder for a example project that uses this library.
+
+To test the example : 
+Create an .env file in the example folder with the following content : 
+
+```env
+INI_FILE_PATH=../configs/sample.yml 
+```
+
+Then create the corresponding yaml file : 
+```yaml
+# sample.yml
+PORT: 443
+URL: wss://....
+USERNAME: username
+PASSWORD: pwd
+ADDITIONAL_HEADERS:
+  - data-partition-id: osdu
+TOKEN: ACCESS_TOKEN
+TOKEN_URL: https://.../token
+TOKEN_GRANT_TYPE: ...
+TOKEN_SCOPE: ...
+TOKEN_REFRESH_TOKEN: ...
+```
+
+Finally run the client script : 
+```bash
+poetry install
+poetry run client
+```
+
+
+## installation :
+
+Pip:
+```bash
+pip install py-etp-client
+```
+
+Poetry
+```bash
+poetry add py-etp-client
+```
+
+## Usage : 
+
+
+Check [example](https://github.com/geosiris-technologies/py-etp-client/tree/main/example/py_etp_client_example/main.py) for more information

@@ -17,7 +17,7 @@ class ETPConfig:
     USERNAME = os.getenv("USERNAME")
     PASSWORD = os.getenv("PASSWORD")
     ADDITIONAL_HEADERS = os.getenv("ADDITIONAL_HEADERS")
-    TOKEN = os.getenv("TOKEN")
+    ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
     TOKEN_URL = os.getenv("TOKEN_URL")
     TOKEN_GRANT_TYPE = os.getenv("TOKEN_GRANT_TYPE")
     TOKEN_SCOPE = os.getenv("TOKEN_SCOPE")
@@ -42,9 +42,7 @@ class ETPConfig:
                     # Dynamically set attributes in the Config class
                     setattr(self, key, value)
         else:
-            print(
-                f"Warning: YAML file {yml_file_path} not found. Skipping YAML configuration."
-            )
+            print(f"Warning: YAML file {yml_file_path} not found. Skipping YAML configuration.")
 
     def to_dict(self):
         """
@@ -56,7 +54,7 @@ class ETPConfig:
             "USERNAME": self.USERNAME,
             "PASSWORD": self.PASSWORD,
             "ADDITIONAL_HEADERS": self.ADDITIONAL_HEADERS,
-            "TOKEN": self.TOKEN,
+            "ACCESS_TOKEN": self.ACCESS_TOKEN,
             "TOKEN_URL": self.TOKEN_URL,
             "TOKEN_GRANT_TYPE": self.TOKEN_GRANT_TYPE,
             "TOKEN_SCOPE": self.TOKEN_SCOPE,

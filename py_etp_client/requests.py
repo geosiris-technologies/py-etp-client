@@ -201,15 +201,26 @@ def get_dataspaces():
     return GetDataspaces()
 
 
-def put_dataspace(dataspace_names: list):
+def put_dataspace(dataspace_names: list, custom_data: dict = None):
     ds_map = {}
     now = epoch()
+
+    custom_data_reshaped = None
+    if custom_data is not None:
+        custom_data_reshaped = {}
+        for key, value in custom_data.items():
+            if isinstance(value, list) or isinstance(value, np.ndarray):
+                custom_data_reshaped[key] = DataValue(item=get_any_array(array=value).item)
+            else:
+                custom_data_reshaped[key] = DataValue(item=value)
+
     for ds_name in dataspace_names:
         ds_map[str(len(ds_map))] = Dataspace(
             uri=("eml:///dataspace('" + ds_name + "')" if "eml:///" not in ds_name else ds_name),
             store_last_write=now,
             store_created=now,
             path=ds_name,
+            custom_data=custom_data_reshaped or {},
         )
 
     return PutDataspaces(dataspaces=ds_map)
@@ -275,7 +286,6 @@ def _create_data_object(
             obj = read_energyml_json_str(obj_as_str)[0]
             format = "json"
     elif obj_as_str is None:
-        obj_as_str = obj.to_xml()
         if format == "json":
             obj_as_str = serialize_json(obj)
         else:

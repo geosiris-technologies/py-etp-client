@@ -23,6 +23,7 @@ from py_etp_client import (
     DeleteDataspacesResponse,
     PutDataObjects,
     PutDataObjectsResponse,
+    GetDataObjectsResponse,
     GetDataArrays,
     DataArrayIdentifier,
     GetDataArraysResponse,
@@ -43,6 +44,8 @@ from py_etp_client import (
     RollbackTransactionResponse,
     CommitTransaction,
     CommitTransactionResponse,
+    DeleteDataObjects,
+    DeleteDataObjectsResponse,
 )
 
 
@@ -93,14 +96,19 @@ class ETPClient(ETPSimpleClient):
             datasapaces.extend(gdr_msg.body.dataspaces)
         return datasapaces
 
-    def put_dataspace(self, dataspace_names: List[str], timeout: Optional[int] = 5):
+    def put_dataspace(self, dataspace_names: List[str], custom_data=None, timeout: Optional[int] = 5):
         """Put dataspaces.
+
+        /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
 
         Args:
             dataspace_names (List[str]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
-        pdm_msg_list = self.send_and_wait(put_dataspace(dataspace_names), timeout=timeout)
+        logging.warning("In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags")
+        pdm_msg_list = self.send_and_wait(
+            put_dataspace(dataspace_names=dataspace_names, custom_data=custom_data), timeout=timeout
+        )
         res = {}
         for pdm in pdm_msg_list:
             if isinstance(pdm.body, PutDataspacesResponse):
@@ -159,7 +167,7 @@ class ETPClient(ETPSimpleClient):
     # /____/\__/\____/_/   \___/
 
     def get_data_object(
-        self, uris: Union[str, Dict, List], format: str = "xml", timeout: Optional[int] = 5
+        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: Optional[int] = 5
     ) -> Union[Dict[str, str], List[str], str]:
         """Get data object from the server.
 
@@ -185,19 +193,28 @@ class ETPClient(ETPSimpleClient):
         else:
             raise ValueError("uri must be a string, a dict or a list of strings")
 
-        gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format_=format), timeout=timeout)
+        for ui in uris_dict.keys():
+            # remove starting and trailing spaces
+            uris_dict[ui] = uris_dict[ui].strip()
+
+        gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format_=format_), timeout=timeout)
         data_obj = {}
 
         for gdor in gdor_msg_list:
-            data_obj.update({k: v.data for k, v in gdor.body.data_objects.items()})
+            if isinstance(gdor.body, GetDataObjectsResponse):
+                data_obj.update({k: v.data for k, v in gdor.body.data_objects.items()})
+            else:
+                logging.error("Error: %s", gdor.body)
 
         res = None
-        if isinstance(uris, str):
-            res = data_obj["0"]
-        elif isinstance(uris, dict):
-            res = {k: data_obj[k] for k in uris.keys()}
-        elif isinstance(uris, list):
-            res = [data_obj[str(i)] for i in range(len(uris))]
+        if len(data_obj) > 0:
+            if isinstance(uris, str):
+                res = data_obj["0"]
+            elif isinstance(uris, dict):
+                res = {k: data_obj[k] for k in uris.keys()}
+            elif isinstance(uris, list):
+                res = [data_obj[str(i)] for i in range(len(uris))]
+
         return res
 
     def put_data_object_str(self, obj_content: str, dataspace_name: str, timeout: int = 5) -> Dict[str, Any]:
@@ -233,7 +250,7 @@ class ETPClient(ETPSimpleClient):
 
         do_dict = {}
         for o in obj:
-            do_dict[str(len(do_dict))] = _create_data_object(obj=o, dataspace_name=dataspace_name)
+            do_dict[str(len(do_dict))] = _create_data_object(obj=o, dataspace_name=dataspace_name, format="xml")
 
         pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
 
@@ -243,6 +260,39 @@ class ETPClient(ETPSimpleClient):
                 res.update(pdor.body.success)
             else:
                 logging.error("Error: %s", pdor.body)
+        return res
+
+    def delete_data_object(self, uris: Union[str, Dict, List], timeout: Optional[int] = 5) -> Dict[str, Any]:
+        """Delete data object from the server.
+
+        Args:
+            uris (Union[str, Dict, List]): Uri(s) of the objects
+            timeout (Optional[int], optional): Defaults to 5.
+
+        Raises:
+            ValueError: if uris is not a string, a dict or a list of strings
+
+        Returns:
+            Dict[str, Any]: A map of uri and a boolean indicating if the object has been successfully deleted
+        """
+        uris_dict = {}
+        if isinstance(uris, str):
+            uris_dict["0"] = uris
+        elif isinstance(uris, dict):
+            uris_dict = uris
+        elif isinstance(uris, list):
+            for i, u in enumerate(uris):
+                uris_dict[str(i)] = u
+        else:
+            raise ValueError("uri must be a string, a dict or a list of strings")
+
+        gdor_msg_list = self.send_and_wait(DeleteDataObjects(uris=uris_dict), timeout=timeout)
+        res = {}
+        for gdor in gdor_msg_list:
+            if isinstance(gdor.body, DeleteDataObjectsResponse):
+                res.update(gdor.body.deleted_uris)
+            else:
+                logging.error("Error: %s", gdor.body)
         return res
 
     #     ____        __        ___
@@ -389,7 +439,7 @@ class ETPClient(ETPSimpleClient):
             if isinstance(pdar.body, PutDataArraysResponse):
                 res.update(pdar.body.success)
             else:
-                logging.info("Data array successfully put")
+                logging.info("Data array put failed: %s", pdar.body)
 
         return res
 
@@ -429,21 +479,38 @@ class ETPClient(ETPSimpleClient):
     #   / / / ___/ __ `/ __ \/ ___/ __ `/ ___/ __/ / __ \/ __ \
     #  / / / /  / /_/ / / / (__  ) /_/ / /__/ /_/ / /_/ / / / /
     # /_/ /_/   \__,_/_/ /_/____/\__,_/\___/\__/_/\____/_/ /_/
-    def start_transaction(self, dataspace: str, timeout: int = 5) -> Optional[int]:
+    def start_transaction(
+        self, dataspace: Union[str, List[str]], readonly: bool = False, msg: str = "", timeout: int = 5
+    ) -> Optional[int]:
         """Start a transaction.
 
         Args:
-            dataspace (str): dataspace name
+            dataspace (Union[str; List[str]]): Dataspace name or list of dataspace names
+            or list of dataspace uris. If a list is provided, the transaction will be started on all the dataspaces.
             timeout (int, optional): Defaults to 5.
 
         Returns:
             int: transaction id
         """
+
+        dataspaceUris = [dataspace] if isinstance(dataspace, str) else dataspace
+
+        for i, ds in enumerate(dataspaceUris):
+            if not ds.startswith("eml:///"):
+                dataspaceUris[i] = f"eml:///dataspace('{ds}')"
+
         if self.active_transaction is not None:
             logging.warning("A transaction is already active, please commit it before starting a new one")
             return self.active_transaction
         else:
-            str_msg_list = self.send_and_wait(StartTransaction(dataspace=dataspace), timeout=timeout)
+            str_msg_list = self.send_and_wait(
+                StartTransaction(
+                    dataspaceUris=dataspaceUris,
+                    message=msg,
+                    readOnly=readonly,
+                ),
+                timeout=timeout,
+            )
 
             transaction_id = None
             for str_msg in str_msg_list:

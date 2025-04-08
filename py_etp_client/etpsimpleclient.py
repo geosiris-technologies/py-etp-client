@@ -18,6 +18,7 @@ from etptypes.energistics.etp.v12.protocol.core.request_session import (
 
 from py_etp_client.requests import default_request_session
 from py_etp_client.auth import basic_auth_encode
+from py_etp_client import CloseSession
 
 # To enable handlers
 from py_etp_client.serverprotocols import (
@@ -35,7 +36,7 @@ class ETPSimpleClient:
 
     def __init__(
         self,
-        url,
+        url: str,
         spec: Optional[ETPConnection],
         access_token: Optional[str] = None,
         username: Optional[str] = None,
@@ -45,6 +46,12 @@ class ETPSimpleClient:
         req_session: Optional[RequestSession] = None,
     ):
         self.url = url
+        if not self.url.startswith("ws"):
+            if self.url.lower().startswith("http"):
+                self.url = "ws" + self.url[4:]
+            else:
+                self.url = "wss://" + self.url
+
         self.spec = spec
         self.access_token = access_token
         self.headers = {}
@@ -109,7 +116,7 @@ class ETPSimpleClient:
             req_sess = default_request_session()
             # logging.debug("Sending RequestSession")
             # logging.debug(req_sess.json(by_alias=True, indent=4))
-            answer = asyncio.run(self.send_and_wait(req_sess, 4.0))
+            answer = self.send(req_sess, 4.0)
             logging.info(f"CONNECTED : {answer}")
         except Exception as e:
             logging.error(e)
@@ -118,6 +125,7 @@ class ETPSimpleClient:
         """Runs the WebSocket connection in a separate thread."""
         self.ws = websocket.WebSocketApp(
             self.url,
+            subprotocols=[ETPConnection.SUB_PROTOCOL],
             header=self.headers,
             on_open=self.on_open,
             on_message=self.on_message,
@@ -142,101 +150,56 @@ class ETPSimpleClient:
             self.thread.join()
         logging.info("WebSocket client stopped.")
 
+    def close(self):
+        """Close the WebSocket connection."""
+        self.send(CloseSession(reason="I want to stop"), timeout=2)
+        self.stop()
+
     def on_message(self, ws, message):
         """Handles incoming WebSocket messages."""
         # logging.info(f"Received: {message}")
+        # logging.debug("##> before recieved " )
+        recieved = Message.decode_binary_message(
+            message,
+            dict_map_pro_to_class=ETPConnection.generic_transition_table,
+        )
+        if recieved.is_final_msg():
+            logging.info(f"\n##> recieved header : {recieved.header}")
+            logging.info(f"##> body type : {type(recieved.body)}")
 
         async def handle_msg(conn: ETPConnection, client, msg: bytes):
             try:
-                # logging.debug("##> before recieved " )
-                recieved = Message.decode_binary_message(
-                    msg,
-                    dict_map_pro_to_class=ETPConnection.generic_transition_table,
-                )
-                if recieved.is_final_msg():
-                    logging.debug(f"\n##> recieved header : {recieved.header}")
-                    # logging.debug("\n##> recieved body : ", recieved.body, "\n\n")
-                    # if (
-                    #     recieved.header.protocol == 0
-                    #     or type(recieved.body) != bytes
-                    # ):
-                    # logging.debug("ERR : ", recieved.body)
-                    logging.debug(f"##> body type : {type(recieved.body)}")
-                    # logging.debug("##> body content : ", recieved.body)
-
-                    # msg = await conn.decode_partial_message(recieved)
-
-                    # logging.debug("##> msg " )
-                # try:
-                #     logging.debug("RECEIVED : ")
-                #     logging.debug(recieved.body.json(by_alias=True, indent=4))
-                # except Exception:
-                #     pass
-
-                if msg:
-                    async for b_msg in conn.handle_bytes_generator(msg):
+                if message:
+                    async for b_msg in self.spec.handle_bytes_generator(message):
                         pass
-                        # logging.debug(b_msg)
-                        # if (
-                        #     b_msg.headers.correlation_id
-                        #     not in client.recieved_msg_dict[
-                        #         b_msg.headers.correlation_id
-                        #     ]
-                        # ):
-                        #     client.recieved_msg_dict[
-                        #         b_msg.headers.correlation_id
-                        #     ] = [0]
-                        # client.recieved_msg_dict[
-                        #     b_msg.headers.correlation_id
-                        # ].append(b_msg)
-                    if recieved.header.correlation_id not in client.recieved_msg_dict:
-                        client.recieved_msg_dict[recieved.header.correlation_id] = []
-                    client.recieved_msg_dict[recieved.header.correlation_id].append(recieved)
-                    return (
-                        recieved.header.correlation_id,
-                        client.recieved_msg_dict[recieved.header.correlation_id],
-                    )
-                return None, None
+
+            # return None, None
             except Exception as e:
                 logging.error(f"#ERR: {type(e).__name__}")
-                logging.error(f"#Err: {msg}")
+                logging.error(f"#Err: {message}")
                 raise e
 
-        message_id, data = asyncio.run(handle_msg(self.spec, self, message))
-        if message_id:
+        if recieved.header.correlation_id not in self.recieved_msg_dict:
+            self.recieved_msg_dict[recieved.header.correlation_id] = []
+            self.recieved_msg_dict[recieved.header.correlation_id].append(recieved)
+
+        if recieved.header.correlation_id is not None:
             with self.lock:
-                if message_id in self.pending_requests:
-                    event, _ = self.pending_requests[message_id]
-                    self.pending_requests[message_id] = (event, data)
+                if recieved.header.correlation_id in self.pending_requests:
+                    event, _ = self.pending_requests[recieved.header.correlation_id]
+                    self.pending_requests[recieved.header.correlation_id] = (
+                        event,
+                        self.recieved_msg_dict[recieved.header.correlation_id],
+                    )
                     event.set()
+        asyncio.run(handle_msg(self.spec, self, message))
 
     def send_and_wait(self, req, timeout: int = 5) -> List[Message]:
         """
         Sends an ETP message and wait for all answers.
         Returns a list of all messages received
         """
-        if not self.ws:
-            raise RuntimeError("WebSocket is not connected.")
-
-        obj_msg = Message.get_object_message(etp_object=req)
-
-        async def handle_msg(msg):
-            msg_id = -1
-            async for (
-                m_id,
-                msg_to_send,
-            ) in self.spec.send_msg_and_error_generator(msg, None):
-                self.ws.send(msg_to_send, websocket.ABNF.OPCODE_BINARY)
-                if msg_id < 0:
-                    msg_id = m_id
-                logging.debug(f"@WS: [{m_id}]")
-                logging.debug(obj_msg)
-            return msg_id
-            # logging.debug("Msg sent... ", msg_to_send)
-            # return wait_for_response(conn=self.spec, msg_id = msg_id, timeout=timeout)
-
-        # Send the message
-        msg_id = asyncio.run(handle_msg(obj_msg))
+        msg_id = self.send(req=req, timeout=timeout)
 
         event = threading.Event()
         with self.lock:
@@ -254,6 +217,29 @@ class ETPSimpleClient:
             return response
         else:
             raise TimeoutError(f"No response received for message ID: {msg_id}")
+
+    def send(self, req, timeout: int = 5) -> int:
+        """
+        Sends an ETP message and wait for all answers.
+        Returns the message id
+        """
+        if not self.ws:
+            raise RuntimeError("WebSocket is not connected.")
+
+        obj_msg = Message.get_object_message(etp_object=req)
+
+        msg_id = -1
+        for (
+            m_id,
+            msg_to_send,
+        ) in self.spec.send_msg_and_error_generator(obj_msg, None):
+            self.ws.send(msg_to_send, websocket.ABNF.OPCODE_BINARY)
+            if msg_id < 0:
+                msg_id = m_id
+            logging.debug(f"@WS: [{m_id}]")
+            logging.debug(obj_msg)
+
+        return msg_id
 
     def is_connected(self):
         # logging.debug(self.spec)
