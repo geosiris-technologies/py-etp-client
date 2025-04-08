@@ -51,7 +51,7 @@ poetry run client
 ```
 
 
-## Use:
+## installation :
 
 Pip:
 ```bash
@@ -62,5 +62,8 @@ Poetry
 ```bash
 poetry add py-etp-client
 ```
+
+## Usage : 
+
 
 Check [example](https://github.com/geosiris-technologies/py-etp-client/tree/main/example/py_etp_client_example/main.py) for more information
