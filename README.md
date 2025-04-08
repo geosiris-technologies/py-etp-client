@@ -49,3 +49,18 @@ Finally run the client script :
 poetry install
 poetry run client
 ```
+
+
+## Use:
+
+Pip:
+```bash
+pip install py-etp-client
+```
+
+Poetry
+```bash
+poetry add py-etp-client
+```
+
+Check [example](https://github.com/geosiris-technologies/py-etp-client/tree/main/example/py_etp_client_example/main.py) for more information
