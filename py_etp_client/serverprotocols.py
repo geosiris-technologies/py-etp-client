@@ -104,18 +104,18 @@ def log(*args, pretty: bool = False, **kwargs):
 
 
 def print_resource(res: Resource):
-    log("Resource :", res.uri)
-    log("\tSource count :", res.source_count)
-    log("\tTarget count :", res.target_count)
+    log("Resource : %s", res.uri)
+    log("\tSource count : %s", res.source_count)
+    log("\tTarget count : %s", res.target_count)
     # log("\tLast change :", datetime.fromtimestamp(res.last_changed))
 
 
 def print_dataspace(res: Dataspace):
-    log("Dataspace :", res.uri)
-    log("\tStore last write :", res.store_last_write)
-    log("\tStore created :", res.store_created)
-    log("\tPath :", res.path)
-    log("\ttCustom data :", res.custom_data)
+    log("Dataspace : %s", res.uri)
+    log("\tStore last write : %s", res.store_last_write)
+    log("\tStore created : %s", res.store_created)
+    log("\tPath : %s", res.path)
+    log("\ttCustom data : %s", res.custom_data)
     # log("\tLast change :", datetime.fromtimestamp(res.last_changed))
 
 
@@ -214,9 +214,7 @@ class DiscoveryProtocolPrinter(DiscoveryHandler):
         client_info: Union[None, ClientInfo] = None,
     ) -> AsyncGenerator[bytes, None]:
         log(
-            "## myDiscoveryProtocol ## on_get_resources_response : nb[",
-            len(msg.resources),
-            "]",
+            f"## myDiscoveryProtocol ## on_get_resources_response : nb[{len(msg.resources)}]",
         )
         for res in msg.resources:
             print_resource(res)
@@ -388,9 +386,9 @@ class StoreProtocolPrinter(StoreHandler):
                 if form == "xml":
                     log(do.data.decode("utf-8"))
                 elif form == "json":
-                    json.dumps(json.loads(do.data.data.decode("utf-8")), indent=4)
+                    json.dumps(json.loads(do.data.decode("utf-8")), indent=4)
             except Exception as e:
-                log("\n\n=============", e, "\n")
+                log(f"\n\n============= {e}\n")
                 log(do, pretty=True)
 
         yield

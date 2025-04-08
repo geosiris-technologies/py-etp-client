@@ -28,8 +28,8 @@ output*
 *.log
 
 .env
-configs/*_.yml
-configs/*_.yaml
+**/*_.yml
+**/poetry.lock
 configs/gabbro
 
 
@@ -37,3 +37,4 @@ downloads
 manip
 test-data/
 manip.txt
+py_etp_client/main.py

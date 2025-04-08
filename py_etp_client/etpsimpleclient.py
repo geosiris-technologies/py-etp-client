@@ -18,6 +18,7 @@ from etptypes.energistics.etp.v12.protocol.core.request_session import (
 
 from py_etp_client.requests import default_request_session
 from py_etp_client.auth import basic_auth_encode
+from py_etp_client import CloseSession
 
 # To enable handlers
 from py_etp_client.serverprotocols import (
@@ -148,6 +149,11 @@ class ETPSimpleClient:
         if self.thread:
             self.thread.join()
         logging.info("WebSocket client stopped.")
+
+    def close(self):
+        """Close the WebSocket connection."""
+        self.send(CloseSession(reason="I want to stop"), timeout=2)
+        self.stop()
 
     def on_message(self, ws, message):
         """Handles incoming WebSocket messages."""
