@@ -45,6 +45,21 @@ class ETPSimpleClient:
         verify: Optional[Any] = None,
         req_session: Optional[RequestSession] = None,
     ):
+        """Initializes the ETPSimpleClient with the given parameters.
+        This class is a simple WebSocket client for ETP (Energistics Transfer Protocol) connections.
+        It handles the connection, sending and receiving messages, and managing the connection state.
+        It also provides a method to send messages and wait for responses.
+
+        Args:
+            url (str): The WebSocket URL to connect to.
+            spec (Optional[ETPConnection]): The ETPConnection specification to use.
+            access_token (Optional[str], optional): Access token for authentication. Defaults to None.
+            username (Optional[str], optional): Username for basic authentication (ignored if access_token is provided). Defaults to None.
+            password (Optional[str], optional): Password for basic authentication (ignored if access_token is provided). Defaults to None.
+            headers (Optional[dict], optional): Additional headers to include in the WebSocket request. Defaults to None.
+            verify (Optional[Any], optional): SSL verification options. Defaults to None.
+            req_session (Optional[RequestSession], optional): RequestSession object to use. If None provided, a default one will be created. Defaults to None.
+        """
         self.url = url
         if not self.url.startswith("ws"):
             if self.url.lower().startswith("http"):
@@ -132,6 +147,9 @@ class ETPSimpleClient:
             on_error=self.on_error,
             on_close=self.on_close,
         )
+        logging.info(f"Connecting to {self.url} ...")
+        if self.sslopt:
+            self.ws.run_forever(sslopt=self.sslopt)
         self.ws.run_forever(sslopt=self.sslopt)
 
     def start(self):
@@ -242,6 +260,11 @@ class ETPSimpleClient:
         return msg_id
 
     def is_connected(self):
+        """Checks if the WebSocket connection is open and the etp connexion is active
+
+        Returns:
+            bool: True if connected, False otherwise
+        """
         # logging.debug(self.spec)
         # return self.spec.is_connected
         return self.spec.is_connected and not self.closed

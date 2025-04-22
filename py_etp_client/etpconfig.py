@@ -27,14 +27,22 @@ class ETPConfig:
     # Path to YAML file (from .env)
     INI_FILE_PATH = os.getenv("INI_FILE_PATH")
 
-    def __init__(self):
-        if self.INI_FILE_PATH:
+    def __init__(self, ini_file_path=None):
+        """
+        Initialize the ETPConfig class and load environment variables.
+        If an INI_FILE_PATH is provided, load additional config from the YAML file.
+        """
+        if ini_file_path is not None:
+            self.load_from_yml(ini_file_path)
+        elif self.INI_FILE_PATH:
             self.load_from_yml(self.INI_FILE_PATH)
 
     def load_from_yml(self, yml_file_path):
         """
         Load additional config from the YAML file and overwrite .env variables.
         """
+        print("reading yml file")
+        print(yml_file_path)
         if os.path.exists(yml_file_path):
             with open(yml_file_path, "r") as yml_file:
                 yml_config = yaml.safe_load(yml_file)

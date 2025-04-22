@@ -18,6 +18,7 @@ from py_etp_client.requests import (
     delete_dataspace,
 )
 from py_etp_client import (
+    ProtocolException,
     Dataspace,
     PutDataspacesResponse,
     DeleteDataspacesResponse,
@@ -27,6 +28,7 @@ from py_etp_client import (
     GetDataArrays,
     DataArrayIdentifier,
     GetDataArraysResponse,
+    GetResourcesResponse,
     PutDataArrays,
     PutDataArraysType,
     DataArray,
@@ -96,7 +98,9 @@ class ETPClient(ETPSimpleClient):
             datasapaces.extend(gdr_msg.body.dataspaces)
         return datasapaces
 
-    def put_dataspace(self, dataspace_names: List[str], custom_data=None, timeout: Optional[int] = 5):
+    def put_dataspace(
+        self, dataspace_names: List[str], custom_data=None, timeout: Optional[int] = 5
+    ) -> Union[Dict[str, Any], ProtocolException]:
         """Put dataspaces.
 
         /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
@@ -113,11 +117,15 @@ class ETPClient(ETPSimpleClient):
         for pdm in pdm_msg_list:
             if isinstance(pdm.body, PutDataspacesResponse):
                 res.update(pdm.body.success)
+            elif isinstance(pdm.body, ProtocolException):
+                return pdm.body
             else:
                 logging.error("Error: %s", pdm.body)
         return res
 
-    def delete_dataspace(self, dataspace_names: List[str], timeout: Optional[int] = 5):
+    def delete_dataspace(
+        self, dataspace_names: List[str], timeout: Optional[int] = 5
+    ) -> Union[Dict[str, Any], ProtocolException]:
         """Delete dataspaces.
 
         Args:
@@ -129,6 +137,8 @@ class ETPClient(ETPSimpleClient):
         for ddm in ddm_msg_list:
             if isinstance(ddm.body, DeleteDataspacesResponse):
                 res.update(ddm.body.success)
+            elif isinstance(ddm.body, ProtocolException):
+                return ddm.body
             else:
                 logging.error("Error: %s", ddm.body)
         return res
@@ -140,7 +150,9 @@ class ETPClient(ETPSimpleClient):
     # /_____/_/____/\___/\____/|___/\___/_/   \__, /
     #                                        /____/
 
-    def get_resources(self, uri: str, depth: int = 1, scope: str = None, types_filter: List[str] = None, timeout=10):
+    def get_resources(
+        self, uri: str, depth: int = 1, scope: str = None, types_filter: List[str] = None, timeout=10
+    ) -> Union[List[Any], ProtocolException]:
         """Get resources from the server.
 
         Args:
@@ -157,7 +169,12 @@ class ETPClient(ETPSimpleClient):
 
         resources = []
         for gr in gr_msg_list:
-            resources.extend(gr.body.resources)
+            if isinstance(gr.body, GetResourcesResponse):
+                resources.extend(gr.body.resources)
+            elif isinstance(gr.body, ProtocolException):
+                return gr.body
+            else:
+                logging.error("Error: %s", gr.body)
         return resources
 
     #    _____ __
@@ -168,7 +185,7 @@ class ETPClient(ETPSimpleClient):
 
     def get_data_object(
         self, uris: Union[str, Dict, List], format_: str = "xml", timeout: Optional[int] = 5
-    ) -> Union[Dict[str, str], List[str], str]:
+    ) -> Union[Dict[str, str], List[str], str, ProtocolException]:
         """Get data object from the server.
 
         Args:
@@ -204,7 +221,8 @@ class ETPClient(ETPSimpleClient):
             if isinstance(gdor.body, GetDataObjectsResponse):
                 data_obj.update({k: v.data for k, v in gdor.body.data_objects.items()})
             else:
-                logging.error("Error: %s", gdor.body)
+                # logging.error("Error: %s", gdor.body)
+                return gdor.body
 
         res = None
         if len(data_obj) > 0:
