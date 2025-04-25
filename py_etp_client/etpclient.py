@@ -4,9 +4,13 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+from energyml.utils.uri import Uri as ETPUri
+from energyml.utils.epc import Epc
+from energyml.utils.constants import epoch
 from py_etp_client.etpsimpleclient import ETPSimpleClient
 from py_etp_client import RequestSession, GetDataObjects
 from etpproto.connection import ETPConnection, ConnectionType
+
 
 from py_etp_client.requests import (
     _create_data_object,
@@ -18,36 +22,41 @@ from py_etp_client.requests import (
     delete_dataspace,
 )
 from py_etp_client import (
-    ProtocolException,
-    Dataspace,
-    PutDataspacesResponse,
-    DeleteDataspacesResponse,
-    PutDataObjects,
-    PutDataObjectsResponse,
-    GetDataObjectsResponse,
-    GetDataArrays,
-    DataArrayIdentifier,
-    GetDataArraysResponse,
-    GetResourcesResponse,
-    PutDataArrays,
-    PutDataArraysType,
-    DataArray,
-    PutDataArraysResponse,
-    GetDataSubarrays,
-    GetDataSubarraysType,
-    GetDataSubarraysResponse,
-    GetDataArrayMetadata,
-    GetDataArrayMetadataResponse,
-    DataArrayMetadata,
-    GetSupportedTypesResponse,
-    StartTransaction,
-    StartTransactionResponse,
-    RollbackTransaction,
-    RollbackTransactionResponse,
+    Authorize,
+    AuthorizeResponse,
     CommitTransaction,
     CommitTransactionResponse,
+    DataArray,
+    DataArrayIdentifier,
+    DataArrayMetadata,
+    Dataspace,
     DeleteDataObjects,
     DeleteDataObjectsResponse,
+    DeleteDataspacesResponse,
+    GetDataArrayMetadata,
+    GetDataArrayMetadataResponse,
+    GetDataArrays,
+    GetDataArraysResponse,
+    GetDataObjectsResponse,
+    GetDataspacesResponse,
+    GetDataSubarrays,
+    GetDataSubarraysResponse,
+    GetDataSubarraysType,
+    GetResourcesResponse,
+    GetSupportedTypesResponse,
+    Ping,
+    Pong,
+    ProtocolException,
+    PutDataArrays,
+    PutDataArraysResponse,
+    PutDataArraysType,
+    PutDataObjects,
+    PutDataObjectsResponse,
+    PutDataspacesResponse,
+    RollbackTransaction,
+    RollbackTransactionResponse,
+    StartTransaction,
+    StartTransactionResponse,
 )
 
 
@@ -76,6 +85,45 @@ class ETPClient(ETPSimpleClient):
 
         self.active_transaction = None
 
+    #    ______
+    #   / ____/___  ________
+    #  / /   / __ \/ ___/ _ \
+    # / /___/ /_/ / /  /  __/
+    # \____/\____/_/   \___/
+
+    def ping(self, timeout: Optional[int] = 5) -> bool:
+        """Ping the server.
+
+        Args:
+            timeout (Optional[int], optional): Defaults to 5.
+
+        Returns:
+            bool: True if the server is reachable
+        """
+        ping_msg_list = self.send_and_wait(Ping(current_date_time=epoch()), timeout=timeout)
+        for ping_msg in ping_msg_list:
+            if isinstance(ping_msg.body, ProtocolException):
+                return False
+        return True
+
+    def authorize(
+        self, authorization: str, supplementalAuthorization: Optional[dict] = None, timeout: Optional[int] = 5
+    ) -> Optional[Union[AuthorizeResponse, ProtocolException]]:
+        """Authorize the client.
+
+        Args:
+            authorization (str): Authorization string
+            supplementalAuthorization (dict): Supplemental authorization string
+
+        Returns:
+            Optional[Union[AuthorizeResponse, ProtocolException]]: Returns the authorization response or a ProtocolException if an error occurs
+        """
+        auth_msg_list = self.send_and_wait(
+            Authorize(authorization=authorization, supplementalAuthorization=supplementalAuthorization or {}),
+            timeout=timeout,
+        )
+        return auth_msg_list[0].body
+
     #     ____        __
     #    / __ \____ _/ /_____ __________  ____ _________
     #   / / / / __ `/ __/ __ `/ ___/ __ \/ __ `/ ___/ _ \
@@ -95,7 +143,10 @@ class ETPClient(ETPSimpleClient):
 
         datasapaces = []
         for gdr_msg in gdr_msg_list:
-            datasapaces.extend(gdr_msg.body.dataspaces)
+            if isinstance(gdr_msg.body, GetDataspacesResponse):
+                datasapaces.extend(gdr_msg.body.dataspaces)
+            elif isinstance(gdr_msg.body, ProtocolException):
+                return gdr_msg.body
         return datasapaces
 
     def put_dataspace(
@@ -207,6 +258,8 @@ class ETPClient(ETPSimpleClient):
         elif isinstance(uris, list):
             for i, u in enumerate(uris):
                 uris_dict[str(i)] = u
+        elif isinstance(uris, ETPUri):
+            uris_dict["0"] = str(uris)
         else:
             raise ValueError("uri must be a string, a dict or a list of strings")
 
@@ -235,7 +288,9 @@ class ETPClient(ETPSimpleClient):
 
         return res
 
-    def put_data_object_str(self, obj_content: str, dataspace_name: str, timeout: int = 5) -> Dict[str, Any]:
+    def put_data_object_str(
+        self, obj_content: Union[str, List], dataspace_name: str, timeout: int = 5
+    ) -> Dict[str, Any]:
         """Put data object to the server.
 
         Args:
@@ -243,7 +298,14 @@ class ETPClient(ETPSimpleClient):
             dataspace_name (str): Dataspace name
             timeout (int, optional): Defaults to 5.
         """
-        do_dict = {"0": _create_data_object(obj_as_str=obj_content, dataspace_name=dataspace_name)}
+        if not isinstance(obj_content, list):
+            obj_content = [obj_content]
+
+        do_dict = {}
+        for o in obj_content:
+            do_dict[str(len(do_dict))] = _create_data_object(obj_as_str=o, dataspace_name=dataspace_name)
+
+        # do_dict = {"0": _create_data_object(obj_as_str=obj_content, dataspace_name=dataspace_name)}
 
         pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
 
@@ -259,7 +321,7 @@ class ETPClient(ETPSimpleClient):
         """Put data object to the server.
 
         Args:
-            obj (Any): An object that must be an instance of a class from energyml.(witsml|resqml|prodml|eml) python module or at least having the similar attributes
+            obj (Any): An object that must be an instance of a class from energyml.(witsml|resqml|prodml|eml) python module or at least having the similar attributes, OR a list of such objects.
             dataspace_name (str): Dataspace name
             timeout (int, optional): Defaults to 5.
         """
@@ -313,12 +375,52 @@ class ETPClient(ETPSimpleClient):
                 logging.error("Error: %s", gdor.body)
         return res
 
+    def put_data_object_file(
+        self, file_path: Union[List[str], str], dataspace_name: Optional[str] = None, timeout: int = 5
+    ):
+        """Put data object to the server.
+
+        Args:
+            file_path (Union[List[str], str]): Path to the file(s) to be uploaded
+            dataspace_name (str): Dataspace name
+            timeout (int, optional): Defaults to 5.
+        """
+        if isinstance(file_path, str):
+            file_path = [file_path]
+
+        do_dict = {}
+        for f in file_path:
+            if f.endswith(".xml") or f.endswith(".json"):
+                with open(f, "r") as file:
+                    file_content = file.read()
+                    do_dict[len(do_dict)] = _create_data_object(obj_as_str=file_content, dataspace_name=dataspace_name)
+            elif f.endswith(".epc"):
+                epc = Epc.read_file(f)
+                for obj in epc.energyml_objects:
+                    if obj is not None:
+                        do_dict[len(do_dict)] = _create_data_object(obj=obj, dataspace_name=dataspace_name)
+
+        pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
+
+        res = {}
+        for pdor in pdor_msg_list:
+            if isinstance(pdor.body, PutDataObjectsResponse):
+                res.update(pdor.body.success)
+            elif isinstance(pdor.body, ProtocolException):
+                if len(pdor_msg_list) == 1 and len(pdor.body.errors) == 0:
+                    return pdor.body
+                res.update(pdor.body.errors)
+            else:
+                logging.error("Error: %s", pdor.body)
+        return res
+
     #     ____        __        ___
     #    / __ \____ _/ /_____ _/   |  ______________ ___  __
     #   / / / / __ `/ __/ __ `/ /| | / ___/ ___/ __ `/ / / /
     #  / /_/ / /_/ / /_/ /_/ / ___ |/ /  / /  / /_/ / /_/ /
     # /_____/\__,_/\__/\__,_/_/  |_/_/  /_/   \__,_/\__, /
     #                                              /____/
+
     def get_data_array(self, uri: str, path_in_resource: str, timeout: int = 5) -> np.ndarray:
         """Get an array from the server.
 
@@ -497,6 +599,7 @@ class ETPClient(ETPSimpleClient):
     #   / / / ___/ __ `/ __ \/ ___/ __ `/ ___/ __/ / __ \/ __ \
     #  / / / /  / /_/ / / / (__  ) /_/ / /__/ /_/ / /_/ / / / /
     # /_/ /_/   \__,_/_/ /_/____/\__,_/\___/\__/_/\____/_/ /_/
+
     def start_transaction(
         self, dataspace: Union[str, List[str]], readonly: bool = False, msg: str = "", timeout: int = 5
     ) -> Optional[int]:

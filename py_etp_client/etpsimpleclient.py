@@ -1,6 +1,7 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import json
 import ssl
 import threading
 from typing import Optional, Any, List
@@ -138,6 +139,7 @@ class ETPSimpleClient:
 
     def _run_websocket(self):
         """Runs the WebSocket connection in a separate thread."""
+        print(self.headers)
         self.ws = websocket.WebSocketApp(
             self.url,
             subprotocols=[ETPConnection.SUB_PROTOCOL],

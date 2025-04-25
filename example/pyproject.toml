@@ -18,8 +18,9 @@ url = "https://test.pypi.org/simple/"
 priority = "explicit"
 
 [tool.poetry.dependencies]
-py_etp_client = "^1.0.5"
-# py_etp_client = { file = "../dist/py_etp_client-0.1.2.dev12-py3-none-any.whl" }
+# py_etp_client = "^1.0.5"
+py_etp_client = { file = "../dist/py_etp_client-1.0.6.dev3-py3-none-any.whl" }
+energyml-utils = "^1.8.3"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -57,7 +58,8 @@ exclude = '''
 
 
 [tool.poetry.scripts]
-client = "py_etp_client_example.main:main"
+sample = "py_etp_client_example.main:main"
+client = "py_etp_client_example.ui:looper"
 
 [tool.poetry-dynamic-versioning]
 enable = false
