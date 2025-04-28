@@ -1,5 +1,6 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
+import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
@@ -152,7 +153,9 @@ class ETPClient(ETPSimpleClient):
     def put_dataspace(
         self, dataspace_names: List[str], custom_data=None, timeout: Optional[int] = 5
     ) -> Union[Dict[str, Any], ProtocolException]:
-        """Put dataspaces.
+        """
+        @deprecated: Use put_dataspaces_with_acl instead.
+        Put dataspaces.
 
         /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
 
@@ -173,6 +176,85 @@ class ETPClient(ETPSimpleClient):
             else:
                 logging.error("Error: %s", pdm.body)
         return res
+
+    def put_dataspaces_with_acl(
+        self,
+        dataspace_names: List[str],
+        acl_owners: Union[str, List[str]],
+        acl_viewers: Union[str, List[str]],
+        legal_tags: Union[str, List[str]],
+        other_relevant_data_countries: Union[str, List[str]],
+        timeout: Optional[int] = 5,
+    ) -> Union[Dict[str, Any], ProtocolException]:
+        """Put dataspaces with ACL and legal tags.
+        /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
+        See. https://community.opengroup.org/osdu/platform/domain-data-mgmt-services/reservoir/open-etp-server/-/issues/168#note_370528
+        and https://community.opengroup.org/osdu/platform/domain-data-mgmt-services/reservoir/open-etp-server#osdu-integration
+
+        Args:
+            dataspace_names (List[str]): List of dataspace names
+            acl_owners (Union[str, List[str]]): a list of owners or a json representation of a list of owners
+            acl_viewers (Union[str, List[str]]): a list of viewers or a json representation of a list of viewers
+            legal_tags (List[str]): a list of legal tags or a json representation of a list of legal tags
+            other_relevant_data_countries (Union[str, List[str]]): a list of other relevant data countries or a json representation of a list of other relevant data countries
+            timeout (Optional[int], optional): _description_. Defaults to 5.
+
+        Returns:
+            Union[Dict[str, Any], ProtocolException]:
+        """
+        # Checking ACLs
+        if isinstance(acl_owners, str):
+            owners_obj = json.loads(acl_owners)
+            if isinstance(owners_obj, list):
+                acl_owners = owners_obj
+            else:
+                acl_owners = [acl_owners]
+
+        if isinstance(acl_owners, list):
+            acl_owners = json.dumps(acl_owners)
+
+        if isinstance(acl_viewers, str):
+            viewers_obj = json.loads(acl_viewers)
+            if isinstance(viewers_obj, list):
+                acl_viewers = viewers_obj
+            else:
+                acl_viewers = [acl_viewers]
+
+        if isinstance(acl_viewers, list):
+            acl_viewers = json.dumps(acl_viewers)
+
+        # Checking legal tags
+        if isinstance(legal_tags, str):
+            legal_tags_obj = json.loads(legal_tags)
+            if isinstance(legal_tags_obj, list):
+                legal_tags = legal_tags_obj
+            else:
+                legal_tags = [legal_tags]
+
+        if isinstance(legal_tags, list):
+            legal_tags = json.dumps(legal_tags)
+
+        # Checking other relevant data countries
+        if isinstance(other_relevant_data_countries, str):
+            other_relevant_data_countries_obj = json.loads(other_relevant_data_countries)
+            if isinstance(other_relevant_data_countries_obj, list):
+                other_relevant_data_countries = other_relevant_data_countries_obj
+            else:
+                other_relevant_data_countries = [other_relevant_data_countries]
+
+        if isinstance(other_relevant_data_countries, list):
+            other_relevant_data_countries = json.dumps(other_relevant_data_countries)
+
+        return self.put_dataspace(
+            dataspace_names=dataspace_names,
+            custom_data={
+                "viewers ": acl_viewers,
+                "owners": acl_owners,
+                "legaltags": legal_tags,
+                "otherRelevantDataCountries": other_relevant_data_countries,
+            },
+            timeout=timeout,
+        )
 
     def delete_dataspace(
         self, dataspace_names: List[str], timeout: Optional[int] = 5
