@@ -67,3 +67,17 @@ poetry add py-etp-client
 
 
 Check [example](https://github.com/geosiris-technologies/py-etp-client/tree/main/example/py_etp_client_example/main.py) for more information
+
+### Interactive client (in example folder): 
+You can for example run a interactive client with the following code : 
+
+Install : 
+```bash
+poetry install
+``` 
+
+Run the client :
+
+```bash
+poetry run client
+```

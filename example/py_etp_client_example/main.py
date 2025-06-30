@@ -41,7 +41,7 @@ def start_client() -> ETPClient:
         username=config.USERNAME,
         password=config.PASSWORD,
         headers=config.ADDITIONAL_HEADERS,
-        verify=False,
+        verify=True,
     )
     client.start()
 

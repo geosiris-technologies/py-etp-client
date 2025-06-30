@@ -143,7 +143,7 @@ class CoreProtocolPrinter(CoreHandler):
     async def on_close_session(
         self,
         msg: CloseSession,
-        correlation_id: int,
+        msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
     ) -> AsyncGenerator[bytes, None]:
         log("@on_close_session")
@@ -152,19 +152,19 @@ class CoreProtocolPrinter(CoreHandler):
     async def on_ping(
         self,
         msg: Ping,
-        correlation_id: int,
+        msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
     ) -> AsyncGenerator[bytes, None]:
         log("@on_ping")
         yield Message.get_object_message(
             Pong(currentDateTime=int(datetime.utcnow().timestamp())),
-            correlation_id=correlation_id,
+            correlation_id=msg_header.correlation_id,
         )
 
     async def on_pong(
         self,
         msg: Pong,
-        correlation_id: int,
+        msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
     ) -> AsyncGenerator[bytes, None]:
         log("@on_pong")
@@ -639,19 +639,19 @@ def computeCapability(supportedProtocolList_fun) -> ServerCapabilities:
     protocolDict = supportedProtocolList_fun()
 
     # log(protocolDict, pretty=True)
-
+    print(list(filter(lambda p: p.protocol != 0, protocolDict)))
     return ServerCapabilities(
-        application_name="etpproto",
+        application_name="py_etp_client",
         application_version="1.1.2",
         supported_protocols=list(
             map(
                 lambda d: SupportedProtocol(
                     protocol=d.protocol,
                     protocol_version=d.protocol_version,
-                    role="store",
+                    role="store" if d.protocol != 1 else "producer",
                     protocol_capabilities=d.protocol_capabilities,
                 ),
-                protocolDict,
+                list(filter(lambda p: p.protocol != 0, protocolDict)),
             )
         ),
         supported_data_objects=[

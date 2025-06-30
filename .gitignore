@@ -36,5 +36,7 @@ configs/gabbro
 downloads
 manip
 test-data/
-manip.txt
+manip.*
 py_etp_client/main.py
+rc/
+logs/

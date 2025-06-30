@@ -1,6 +1,7 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import json
 import ssl
 import threading
 from typing import Optional, Any, List
@@ -45,6 +46,21 @@ class ETPSimpleClient:
         verify: Optional[Any] = None,
         req_session: Optional[RequestSession] = None,
     ):
+        """Initializes the ETPSimpleClient with the given parameters.
+        This class is a simple WebSocket client for ETP (Energistics Transfer Protocol) connections.
+        It handles the connection, sending and receiving messages, and managing the connection state.
+        It also provides a method to send messages and wait for responses.
+
+        Args:
+            url (str): The WebSocket URL to connect to.
+            spec (Optional[ETPConnection]): The ETPConnection specification to use.
+            access_token (Optional[str], optional): Access token for authentication. Defaults to None.
+            username (Optional[str], optional): Username for basic authentication (ignored if access_token is provided). Defaults to None.
+            password (Optional[str], optional): Password for basic authentication (ignored if access_token is provided). Defaults to None.
+            headers (Optional[dict], optional): Additional headers to include in the WebSocket request. Defaults to None.
+            verify (Optional[Any], optional): SSL verification options. Defaults to None.
+            req_session (Optional[RequestSession], optional): RequestSession object to use. If None provided, a default one will be created. Defaults to None.
+        """
         self.url = url
         if not self.url.startswith("ws"):
             if self.url.lower().startswith("http"):
@@ -107,8 +123,15 @@ class ETPSimpleClient:
         logging.info(f"Error: {error}")
 
     def on_close(self, ws, close_status_code, close_msg):
+        """Handle WebSocket closure and notify all waiting operations."""
         logging.info("WebSocket closed")
         self.closed = True
+        self.stop_event.set()
+
+        # Signal all waiting events to prevent hanging
+        if hasattr(self, "_connection_closed_events"):
+            for event in list(self._connection_closed_events):
+                event.set()
 
     def on_open(self, ws):
         logging.info("Connected to WebSocket!")
@@ -123,6 +146,7 @@ class ETPSimpleClient:
 
     def _run_websocket(self):
         """Runs the WebSocket connection in a separate thread."""
+        print(self.headers)
         self.ws = websocket.WebSocketApp(
             self.url,
             subprotocols=[ETPConnection.SUB_PROTOCOL],
@@ -132,7 +156,10 @@ class ETPSimpleClient:
             on_error=self.on_error,
             on_close=self.on_close,
         )
-        self.ws.run_forever(sslopt=self.sslopt)
+        logging.info(f"Connecting to {self.url} ...")
+        if self.sslopt:
+            self.ws.run_forever(sslopt=self.sslopt, reconnect=True)
+        self.ws.run_forever(sslopt=self.sslopt, reconnect=True)
 
     def start(self):
         """Start the WebSocket connection in a separate thread."""
@@ -146,9 +173,11 @@ class ETPSimpleClient:
         self.stop_event.set()
         if self.ws:
             self.ws.close()
-        if self.thread:
-            self.thread.join()
         logging.info("WebSocket client stopped.")
+
+        if self.thread and self.thread != threading.current_thread():
+            self.thread.join()
+            self.thread = None
 
     def close(self):
         """Close the WebSocket connection."""
@@ -196,27 +225,58 @@ class ETPSimpleClient:
 
     def send_and_wait(self, req, timeout: int = 5) -> List[Message]:
         """
-        Sends an ETP message and wait for all answers.
-        Returns a list of all messages received
+        Sends an ETP message and waits passively for all answers.
+        Returns a list of all messages received.
+
+        Args:
+            req: The request to send
+            timeout: Maximum time to wait for a response in seconds
+
+        Returns:
+            List[Message]: List of received messages
+
+        Raises:
+            TimeoutError: If no response is received within timeout
+            RuntimeError: If WebSocket connection is closed while waiting
         """
         msg_id = self.send(req=req, timeout=timeout)
 
+        # Create event that will be triggered by on_message or on_close
         event = threading.Event()
+
+        # Register a connection_closed callback if not already present
+        if not hasattr(self, "_connection_closed_events"):
+            self._connection_closed_events = set()
+
+        self._connection_closed_events.add(event)
+
         with self.lock:
             self.pending_requests[msg_id] = (event, None)
 
-            # logging.debug(f"@WS: [{m_id}] {obj_msg}")
+        # Passive waiting - simply wait on the event with timeout
+        if not event.wait(timeout):
+            # Timeout occurred
+            with self.lock:
+                self.pending_requests.pop(msg_id, None)
+                if hasattr(self, "_connection_closed_events"):
+                    self._connection_closed_events.discard(event)
+            raise TimeoutError(f"No response received for message ID: {msg_id} within {timeout} seconds")
 
-        # Wait for the response with the correct ID
-        success = event.wait(timeout)
+        # Check if the wait was interrupted by connection close
+        if self.closed or self.stop_event.is_set():
+            with self.lock:
+                self.pending_requests.pop(msg_id, None)
+                if hasattr(self, "_connection_closed_events"):
+                    self._connection_closed_events.discard(event)
+            raise RuntimeError("WebSocket connection closed while waiting for response")
 
+        # Get the response
         with self.lock:
             _, response = self.pending_requests.pop(msg_id, (None, None))
+            if hasattr(self, "_connection_closed_events"):
+                self._connection_closed_events.discard(event)
 
-        if success and response:
-            return response
-        else:
-            raise TimeoutError(f"No response received for message ID: {msg_id}")
+        return response if response else []
 
     def send(self, req, timeout: int = 5) -> int:
         """
@@ -242,6 +302,11 @@ class ETPSimpleClient:
         return msg_id
 
     def is_connected(self):
+        """Checks if the WebSocket connection is open and the etp connexion is active
+
+        Returns:
+            bool: True if connected, False otherwise
+        """
         # logging.debug(self.spec)
         # return self.spec.is_connected
         return self.spec.is_connected and not self.closed

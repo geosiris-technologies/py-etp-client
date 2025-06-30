@@ -1,5 +1,6 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
+import logging
 from typing import Any, List, Union, AsyncGenerator, Optional
 import uuid as pyUUID
 
@@ -19,68 +20,68 @@ from etpproto.protocols.transaction import TransactionHandler
 import numpy as np
 
 from py_etp_client import (
-    Resource,
-    Dataspace,
-    OpenSession,
-    CloseSession,
-    Ping,
-    Pong,
+    Acknowledge,
+    ActiveStatusKind,
+    AnyArray,
+    ArrayOfBoolean,
+    ArrayOfBytes,
+    ArrayOfDouble,
+    ArrayOfFloat,
+    ArrayOfInt,
+    ArrayOfLong,
+    ArrayOfString,
     Authorize,
     AuthorizeResponse,
-    GetResourcesResponse,
-    GetDeletedResourcesResponse,
-    Acknowledge,
-    DeleteDataspaces,
-    GetDataspaces,
-    PutDataspaces,
-    DeleteDataspacesResponse,
-    GetDataspacesResponse,
-    RequestSession,
-    PutDataspacesResponse,
-    GetDataObjects,
-    PutDataObjects,
+    CloseSession,
+    CommitTransaction,
+    CommitTransactionResponse,
+    Contact,
+    ContextInfo,
+    ContextScopeKind,
+    DataObject,
+    Dataspace,
+    DataValue,
     DeleteDataObjects,
-    GetDataObjectsResponse,
-    PutDataObjectsResponse,
     DeleteDataObjectsResponse,
+    DeleteDataspaces,
+    DeleteDataspacesResponse,
     GetDataArrayMetadata,
     GetDataArrayMetadataResponse,
     GetDataArrays,
-    GetDataSubarrays,
     GetDataArraysResponse,
+    GetDataObjects,
+    GetDataObjectsResponse,
+    GetDataspaces,
+    GetDataspacesResponse,
+    GetDataSubarrays,
     GetDataSubarraysResponse,
-    PutDataArrays,
-    PutDataArraysResponse,
+    GetDeletedResources,
+    GetDeletedResourcesResponse,
+    GetResources,
+    GetResourcesResponse,
     GetSupportedTypes,
     GetSupportedTypesResponse,
+    OpenSession,
+    Ping,
+    Pong,
     ProtocolException,
-    CommitTransaction,
-    CommitTransactionResponse,
+    PutDataArrays,
+    PutDataArraysResponse,
+    PutDataObjects,
+    PutDataObjectsResponse,
+    PutDataspaces,
+    PutDataspacesResponse,
+    RelationshipKind,
+    RequestSession,
+    Resource,
     RollbackTransaction,
     RollbackTransactionResponse,
+    ServerCapabilities,
     StartTransaction,
     StartTransactionResponse,
-    ServerCapabilities,
-    SupportedProtocol,
     SupportedDataObject,
-    DataValue,
-    Contact,
+    SupportedProtocol,
     Version,
-    ContextScopeKind,
-    GetResources,
-    ContextInfo,
-    GetDeletedResources,
-    RelationshipKind,
-    ActiveStatusKind,
-    DataObject,
-    ArrayOfInt,
-    ArrayOfLong,
-    ArrayOfBoolean,
-    ArrayOfFloat,
-    ArrayOfDouble,
-    ArrayOfBytes,
-    ArrayOfString,
-    AnyArray,
 )
 
 from energyml.utils.constants import epoch, gen_uuid, date_to_epoch
@@ -90,7 +91,15 @@ from energyml.utils.introspection import (
     get_object_attribute,
     search_attribute_matching_type,
 )
-from energyml.utils.serialization import read_energyml_xml_str, read_energyml_json_str, serialize_json, serialize_xml
+from energyml.utils.uri import parse_uri
+from energyml.utils.serialization import (
+    read_energyml_xml_str,
+    read_energyml_json_str,
+    serialize_json,
+    serialize_xml,
+    read_energyml_xml_bytes,
+    read_energyml_json_bytes,
+)
 
 
 def get_scope(scope: str):
@@ -123,15 +132,21 @@ def default_request_session():
         applicationName="Geosiris etp client",
         applicationVersion="0.1.0",
         clientInstanceId=gen_uuid(),
-        requestedProtocols=[
-            SupportedProtocol(
-                protocol=cp.value,
-                protocolVersion=etp_version,
-                role="store",
-                protocolCapabilities={},
+        requestedProtocols=list(
+            filter(
+                lambda sp: sp.protocol != 0,
+                [
+                    SupportedProtocol(
+                        protocol=cp.value,
+                        protocolVersion=etp_version,
+                        role="store" if cp.value != 1 else "producer",
+                        protocolCapabilities={},
+                    )
+                    # for cp in CommunicationProtocol
+                    for cp in ETPConnection.transition_table.keys()
+                ],
             )
-            for cp in CommunicationProtocol
-        ],  # ETPConnection.server_capabilities.supported_protocols
+        ),  # ETPConnection.server_capabilities.supported_protocols
         supportedDataObjects=ETPConnection.server_capabilities.supported_data_objects,
         supportedCompression=ETPConnection.server_capabilities.supported_compression,
         supportedFormats=ETPConnection.server_capabilities.supported_formats,
@@ -248,7 +263,11 @@ def delete_data_object(uris: list):
 
 
 def _create_resource(obj: Any, dataspace_name: str = None) -> Resource:
-    uri = str(get_obj_uri(obj, dataspace_name))
+    ds_name = dataspace_name
+    if "eml:///" in ds_name:
+        ds_name = parse_uri(ds_name).dataspace
+
+    uri = str(get_obj_uri(obj, ds_name))
 
     nb_ref = len(search_attribute_matching_type(obj, "DataObjectReference", return_self=False))
     print("Sending data object at uri ", uri, "nbref : ", nb_ref)
@@ -281,9 +300,15 @@ def _create_data_object(
         raise ValueError("Either obj or obj_as_str must be provided")
     if obj is None:
         try:
-            obj = read_energyml_xml_str(obj_as_str)
+            if isinstance(obj_as_str, bytes):
+                obj = read_energyml_xml_bytes(obj_as_str)
+            else:
+                obj = read_energyml_xml_str(obj_as_str)
         except:
-            obj = read_energyml_json_str(obj_as_str)[0]
+            if isinstance(obj_as_str, bytes):
+                obj = read_energyml_json_bytes(obj_as_str)
+            else:
+                obj = read_energyml_json_str(obj_as_str)[0]
             format = "json"
     elif obj_as_str is None:
         if format == "json":
@@ -341,9 +366,11 @@ def get_any_array(
         AnyArray: The AnyArray instance
     """
     if not isinstance(array, np.ndarray):
-        print("was not an array")
+        # logging.debug("@get_any_array: was not an array")
         array = np.array(array)
     array = array.flatten()
+    # logging.debug("\t@get_any_array: type array : %s", type(array.tolist()))
+    # logging.debug("\t@get_any_array: type inside : %s", type(array.tolist()[0]))
     return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))
 
 
