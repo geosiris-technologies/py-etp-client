@@ -15,11 +15,18 @@ from etpproto.connection import (
     ETPConnection,
 )
 
-from energyml.utils.uri import parse_uri
+from energyml.utils.uri import parse_uri, Uri
 from py_etp_client.auth import basic_auth_encode
 from py_etp_client.etpclient import ETPClient
 from py_etp_client.etpconfig import ETPConfig
 from py_etp_client import GetDataspacesResponse, ProtocolException, AuthorizeResponse
+
+
+from py_etp_client.utils import __H5PY_MODULE_EXISTS__
+
+if __H5PY_MODULE_EXISTS__:
+    import h5py
+    from py_etp_client.utils import h5_list_datasets
 
 
 def start_client(config: Optional[ETPConfig] = None) -> ETPClient:
@@ -149,9 +156,9 @@ def looper():
                     print("Please provide a name for the dataspace.")
             elif "delete" in command and "dataspace" in command:
                 if args:
-                    resp = client.delete_dataspace(args[0])
+                    resp = client.delete_dataspace(args[0], timeout=20)
                     if resp:
-                        print(f"Dataspace {args[0]} deleted.")
+                        print(f"Dataspace {args[0]} deletion response : {resp}")
                     else:
                         print(f"Failed to delete dataspace {args[0]}.")
                 else:
@@ -252,31 +259,100 @@ def looper():
 
             elif "get" in command and "dataarray" in command:
                 if len(args) >= 2:
-                    resp = client.get_data_array(uris=args[0], path_in_resource=args[1])
+                    resp = client.get_data_array(uri=args[0], path_in_resource=args[1])
                     print(resp)
                 else:
                     print("Please provide a data array URI and a pathInResource.")
             elif "put" in command and "dataarray" in command:
                 # take dataspace name and file path as args
-                if len(args) >= 3:
-                    json_path = args[2]
-                    data = None
-                    with open(json_path, "r") as f:
-                        json_data = json.loads(f.read())
-                        data = np.array(json_data)
+                if len(args) == 0:
+                    print("Please provide a dataspace URI and a file path.")
+                    uri = input("Enter an uri : ").strip()
+                    path_in_resource = input("Enter a path in resource : ").strip()
+                    dimensions = input("Enter dimensions (comma separated) : ").strip()
+                    array_flat = input("Enter array flat (comma separated) : ").strip()
 
-                    if data is not None:
-                        resp = client.put_data_array(
-                            uri=args[0],
-                            path_in_resource=args[1],
-                            timeout=600,
-                        )
-                        if resp:
-                            print(f"Resource {args[0]} created.")
+                    print(
+                        f"uri: {uri}, path_in_resource: {path_in_resource}, dimensions: {dimensions}, array_flat: {array_flat}"
+                    )
+
+                    resp = client.put_data_array(
+                        uri=uri,
+                        path_in_resource=path_in_resource,
+                        dimensions=[int(d) for d in dimensions.split(",")],
+                        array_flat=[float(a) for a in array_flat.split(",")],
+                        timeout=600,
+                    )
+                if len(args) >= 3:
+                    array_file_path = args[2]
+
+                    if array_file_path.lower().endswith(".json"):
+                        data = None
+                        with open(array_file_path, "r") as f:
+                            json_data = json.loads(f.read())
+                            data = np.array(json_data)
+
+                        if data is not None:
+                            resp = client.put_data_array(
+                                uri=args[0],
+                                path_in_resource=args[1],
+                                timeout=600,
+                            )
+                            if resp:
+                                print(f"Resource {args[0]} created.")
+                            else:
+                                print(f"Failed to create resource {args[0]}.")
+                    elif array_file_path.lower().endswith(".h5"):
+                        if __H5PY_MODULE_EXISTS__:
+                            dataspace_uri = Uri.parse(
+                                args[0] if "eml" in args[0] else "eml:///dataspace('" + args[0] + "')"
+                            )
+                            epc_paths = []
+                            h5_paths = []
+                            for i in range(1, len(args)):
+                                if args[i].lower().endswith(".epc"):
+                                    epc_paths.append(args[i])
+                                elif args[i].lower().endswith(".h5"):
+                                    h5_paths.append(args[i])
+
+                            # epcs = [Epc.read_file(epc_path) for epc_path in epc_paths]
+
+                            for h5_path in h5_paths:
+                                if not os.path.exists(h5_path):
+                                    print(f"File {h5_path} does not exist.")
+                                    continue
+
+                                try:
+                                    datasets_names = h5_list_datasets(h5_file_path=h5_path)
+                                    print("TODO : fix uri for h5 upload to use object uri and not just dataspace uri")
+                                    with h5py.File(h5_path, "r") as h5_file:
+                                        for ds in datasets_names:
+                                            # Create a resource for each dataset in the HDF5 file
+                                            dataset = h5_file[ds]
+                                            if len(dataset) > 0:
+                                                print(
+                                                    f"\t{ds} : {type(dataset[...])} -- {dataset.shape} {type(dataset.shape)} {len(dataset)}"
+                                                )
+                                                resp = client.put_data_array(
+                                                    uri=str(dataspace_uri),
+                                                    path_in_resource=ds,
+                                                    array_flat=dataset[...],
+                                                    dimensions=dataset.shape,
+                                                    timeout=600,
+                                                )
+                                                if resp:
+                                                    print(f"Resource {ds} created in {dataspace_uri}.")
+                                                else:
+                                                    print(f"Failed to create resource {ds} in {dataspace_uri}.")
+                                            else:
+                                                print(f"Dataset {ds} is empty in {h5_path}. Skipping.")
+                                except Exception as e:
+                                    print(f"Failed to load data from {h5_path}: {e}")
                         else:
-                            print(f"Failed to create resource {args[0]}.")
+                            print("H5PY module is not installed. Please install it to use HDF5 files.")
+
                     else:
-                        print(f"Failed to load data from {json_path}.")
+                        print(f"Failed to load data from {array_file_path} (not supported file extension).")
                 else:
                     print("Please provide a dataspace URI and a file path.")
 
