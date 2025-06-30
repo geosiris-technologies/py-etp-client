@@ -343,8 +343,8 @@ def get_array_class_from_dtype(
         return ArrayOfInt
     elif dtype_str.startswith("bool"):
         return ArrayOfBoolean
-    # elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
-    #     return ArrayOfDouble
+    elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
+        return ArrayOfDouble
     elif dtype_str.startswith("float"):
         return ArrayOfFloat
     elif dtype_str.startswith("bytes") or dtype_str.startswith("|S"):
