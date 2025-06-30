@@ -8,6 +8,13 @@ import numpy as np
 from energyml.utils.uri import Uri as ETPUri
 from energyml.utils.epc import Epc
 from energyml.utils.constants import epoch
+from energyml.utils.serialization import (
+    read_energyml_json_bytes,
+    read_energyml_json_str,
+    read_energyml_xml_bytes,
+    read_energyml_xml_str,
+)
+
 from py_etp_client.etpsimpleclient import ETPSimpleClient
 from py_etp_client import RequestSession, GetDataObjects
 from etpproto.connection import ETPConnection, ConnectionType
@@ -59,6 +66,21 @@ from py_etp_client import (
     StartTransaction,
     StartTransactionResponse,
 )
+
+
+def read_energyml_obj(data: Union[str, bytes], format_: str) -> Any:
+    if isinstance(data, str):
+        if format_ == "xml":
+            return read_energyml_xml_str(data)
+        elif format_ == "json":
+            return read_energyml_json_str(data)
+    elif isinstance(data, bytes):
+        if format_ == "xml":
+            return read_energyml_xml_bytes(data)
+        elif format_ == "json":
+            return read_energyml_json_bytes(data)
+    else:
+        raise ValueError("data must be a string or bytes")
 
 
 class ETPClient(ETPSimpleClient):
@@ -163,6 +185,8 @@ class ETPClient(ETPSimpleClient):
             dataspace_names (List[str]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
+        if isinstance(dataspace_names, str):
+            dataspace_names = [dataspace_names]
         logging.warning("In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags")
         pdm_msg_list = self.send_and_wait(
             put_dataspace(dataspace_names=dataspace_names, custom_data=custom_data), timeout=timeout
@@ -195,13 +219,16 @@ class ETPClient(ETPSimpleClient):
             dataspace_names (List[str]): List of dataspace names
             acl_owners (Union[str, List[str]]): a list of owners or a json representation of a list of owners
             acl_viewers (Union[str, List[str]]): a list of viewers or a json representation of a list of viewers
-            legal_tags (List[str]): a list of legal tags or a json representation of a list of legal tags
+            legal_tags (Union[str, List[str]]): a list of legal tags or a json representation of a list of legal tags
             other_relevant_data_countries (Union[str, List[str]]): a list of other relevant data countries or a json representation of a list of other relevant data countries
             timeout (Optional[int], optional): _description_. Defaults to 5.
 
         Returns:
             Union[Dict[str, Any], ProtocolException]:
         """
+        if isinstance(dataspace_names, str):
+            dataspace_names = [dataspace_names]
+
         # Checking ACLs
         if isinstance(acl_owners, str):
             owners_obj = json.loads(acl_owners)
@@ -265,6 +292,8 @@ class ETPClient(ETPSimpleClient):
             dataspace_names (List[str]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
+        if isinstance(dataspace_names, str):
+            dataspace_names = [dataspace_names]
         ddm_msg_list = self.send_and_wait(delete_dataspace(dataspace_names), timeout=timeout)
         res = {}
         for ddm in ddm_msg_list:
@@ -284,7 +313,7 @@ class ETPClient(ETPSimpleClient):
     #                                        /____/
 
     def get_resources(
-        self, uri: str, depth: int = 1, scope: str = None, types_filter: List[str] = None, timeout=10
+        self, uri: str, depth: int = 1, scope: str = "self", types_filter: List[str] = None, timeout=10
     ) -> Union[List[Any], ProtocolException]:
         """Get resources from the server.
 
@@ -309,6 +338,62 @@ class ETPClient(ETPSimpleClient):
             else:
                 logging.error("Error: %s", gr.body)
         return resources
+
+    def get_all_related_objects_uris(
+        self, uri: Union[str, List[str]], scope: str = "target", timeout: int = 5
+    ) -> List[str]:
+        """Get all related objects uris from the server.
+
+        Args:
+            uri (str): Uri of the object
+            timeout (int, optional): Defaults to 5.
+
+        Returns:
+            List[str]: List of uris
+        """
+        allready_checked = []
+        to_check = []
+        if isinstance(uri, str):
+            to_check.append(uri)
+        elif isinstance(uri, list):
+            for u in uri:
+                to_check.append(u)
+
+        while len(to_check) > 0:
+            uri = to_check.pop(0)
+            allready_checked.append(uri)
+            resources = self.get_resources(uri=uri, depth=2, scope=scope, timeout=timeout)
+            for r in resources:
+                try:
+                    if r.uri not in allready_checked and r.uri not in to_check:
+                        to_check.append(r.uri)
+                except Exception as e:
+                    logging.error("Error: %s", e)
+                    continue
+
+        return allready_checked
+
+    def search_resource(self, dataspace: str, uuid: str, timeout: int = 5) -> List[str]:
+        """Search for a resource in the server.
+
+        Args:
+            dataspace (str): Dataspace name
+            uuid (str): UUID of the object
+            timeout (int, optional): Defaults to 5.
+
+        Returns:
+            List[str]: List of uris
+        """
+        resources = self.get_resources(uri=dataspace, timeout=timeout)
+        uris = []
+        for r in resources:
+            if uuid in r.uri:
+                try:
+                    uris.append(r.uri)
+                except Exception as e:
+                    logging.error("Error: %s", e)
+                    continue
+        return uris
 
     #    _____ __
     #   / ___// /_____  ________
@@ -370,6 +455,28 @@ class ETPClient(ETPSimpleClient):
 
         return res
 
+    def get_data_object_as_obj(
+        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: Optional[int] = 5
+    ) -> Union[Dict[str, Any], List[Any], Any, ProtocolException]:
+        # TODO : test if energyml.resqml or energyml.witsml exists in the dependencies
+        objs = self.get_data_object(
+            uris=uris,
+            format_=format_,
+            timeout=timeout,
+        )
+
+        if isinstance(objs, str):
+            return read_energyml_obj(objs, format_)
+        elif isinstance(objs, dict):
+            for k, v in objs.items():
+                objs[k] = read_energyml_obj(v, format_)
+        elif isinstance(objs, list):
+            for i, v in enumerate(objs):
+                objs[i] = read_energyml_obj(v, format_)
+        # else:
+        # raise ValueError("data must be a string, a dict or a list of strings")
+        return objs
+
     def put_data_object_str(
         self, obj_content: Union[str, List], dataspace_name: str, timeout: int = 5
     ) -> Dict[str, Any]:
@@ -399,7 +506,9 @@ class ETPClient(ETPSimpleClient):
                 logging.error("Error: %s", pdor.body)
         return res
 
-    def put_data_object_obj(self, obj: Any, dataspace_name: str, timeout: int = 5) -> Dict[str, Any]:
+    def put_data_object_obj(
+        self, obj: Any, dataspace_name: str, format_: str = "xml", timeout: int = 5
+    ) -> Dict[str, Any]:
         """Put data object to the server.
 
         Args:
@@ -412,7 +521,7 @@ class ETPClient(ETPSimpleClient):
 
         do_dict = {}
         for o in obj:
-            do_dict[str(len(do_dict))] = _create_data_object(obj=o, dataspace_name=dataspace_name, format="xml")
+            do_dict[str(len(do_dict))] = _create_data_object(obj=o, dataspace_name=dataspace_name, format=format_)
 
         pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
 
@@ -515,12 +624,13 @@ class ETPClient(ETPSimpleClient):
             np.ndarray: the array, reshaped in the correct dimension
         """
         gdar_msg_list = self.send_and_wait(
-            GetDataArrays(dataArrays={"0": DataArrayIdentifier(uri=uri, pathInResource=path_in_resource)})
+            GetDataArrays(dataArrays={"0": DataArrayIdentifier(uri=uri, path_in_resource=path_in_resource)}),
+            timeout=timeout,
         )
         array = None
         for gdar in gdar_msg_list:
             if isinstance(gdar.body, GetDataArraysResponse) and "0" in gdar.body.data_arrays:
-                print(gdar)
+                # print(gdar)
                 if array is None:
                     array = np.array(gdar.body.data_arrays["0"].data.item.values).reshape(
                         tuple(gdar.body.data_arrays["0"].dimensions)
@@ -562,7 +672,8 @@ class ETPClient(ETPSimpleClient):
                         count=count,
                     )
                 }
-            )
+            ),
+            timeout=timeout,
         )
         array = None
         for gdar in gdar_msg_list:
@@ -592,7 +703,8 @@ class ETPClient(ETPSimpleClient):
             Dict[str, Any]: metadata of the array
         """
         gdar_msg_list = self.send_and_wait(
-            GetDataArrayMetadata(dataArrays={"0": DataArrayIdentifier(uri=uri, pathInResource=path_in_resource)})
+            GetDataArrayMetadata(dataArrays={"0": DataArrayIdentifier(uri=uri, pathInResource=path_in_resource)}),
+            timeout=timeout,
         )
         metadata = {}
         for gdar in gdar_msg_list:
@@ -629,11 +741,12 @@ class ETPClient(ETPSimpleClient):
             PutDataArrays(
                 dataArrays={
                     "0": PutDataArraysType(
-                        uid=DataArrayIdentifier(uri=uri, path_in_resource=path_in_resource),
+                        uid=DataArrayIdentifier(uri=str(uri), path_in_resource=path_in_resource),
                         array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),
                     )
                 }
-            )
+            ),
+            timeout=timeout,
         )
 
         res = {}

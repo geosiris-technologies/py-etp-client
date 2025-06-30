@@ -1,5 +1,6 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
+import logging
 from typing import Any, List, Union, AsyncGenerator, Optional
 import uuid as pyUUID
 
@@ -91,7 +92,14 @@ from energyml.utils.introspection import (
     search_attribute_matching_type,
 )
 from energyml.utils.uri import parse_uri
-from energyml.utils.serialization import read_energyml_xml_str, read_energyml_json_str, serialize_json, serialize_xml
+from energyml.utils.serialization import (
+    read_energyml_xml_str,
+    read_energyml_json_str,
+    serialize_json,
+    serialize_xml,
+    read_energyml_xml_bytes,
+    read_energyml_json_bytes,
+)
 
 
 def get_scope(scope: str):
@@ -292,9 +300,15 @@ def _create_data_object(
         raise ValueError("Either obj or obj_as_str must be provided")
     if obj is None:
         try:
-            obj = read_energyml_xml_str(obj_as_str)
+            if isinstance(obj_as_str, bytes):
+                obj = read_energyml_xml_bytes(obj_as_str)
+            else:
+                obj = read_energyml_xml_str(obj_as_str)
         except:
-            obj = read_energyml_json_str(obj_as_str)[0]
+            if isinstance(obj_as_str, bytes):
+                obj = read_energyml_json_bytes(obj_as_str)
+            else:
+                obj = read_energyml_json_str(obj_as_str)[0]
             format = "json"
     elif obj_as_str is None:
         if format == "json":
@@ -329,8 +343,8 @@ def get_array_class_from_dtype(
         return ArrayOfInt
     elif dtype_str.startswith("bool"):
         return ArrayOfBoolean
-    elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
-        return ArrayOfDouble
+    # elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
+    #     return ArrayOfDouble
     elif dtype_str.startswith("float"):
         return ArrayOfFloat
     elif dtype_str.startswith("bytes") or dtype_str.startswith("|S"):
@@ -352,9 +366,11 @@ def get_any_array(
         AnyArray: The AnyArray instance
     """
     if not isinstance(array, np.ndarray):
-        print("was not an array")
+        # logging.debug("@get_any_array: was not an array")
         array = np.array(array)
     array = array.flatten()
+    # logging.debug("\t@get_any_array: type array : %s", type(array.tolist()))
+    # logging.debug("\t@get_any_array: type inside : %s", type(array.tolist()[0]))
     return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))
 
 
