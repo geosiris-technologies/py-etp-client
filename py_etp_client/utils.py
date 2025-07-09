@@ -1,7 +1,9 @@
-__H5PY_MODULE_EXISTS__ = True
+__H5PY_MODULE_EXISTS__ = False
 
 try:
     import h5py
+
+    __H5PY_MODULE_EXISTS__ = True
 except Exception:
     __H5PY_MODULE_EXISTS__ = False
 
@@ -16,10 +18,10 @@ if __H5PY_MODULE_EXISTS__:
         :return: List of dataset names in the HDF5 file
         """
         res = []
-        with h5py.File(h5_file_path, "r") as f:
+        with h5py.File(h5_file_path, "r") as f:  # type: ignore
             # Function to print the names of all datasets
             def list_datasets(name, obj):
-                if isinstance(obj, h5py.Dataset):  # Check if the object is a dataset
+                if isinstance(obj, h5py.Dataset):  # type: ignore # Check if the object is a dataset
                     res.append(name)
 
             # Visit all items in the HDF5 file and apply the list function

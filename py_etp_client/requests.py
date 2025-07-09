@@ -1,7 +1,7 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import logging
-from typing import Any, List, Union, AsyncGenerator, Optional
+from typing import Any, List, Type, Union, AsyncGenerator, Optional
 import uuid as pyUUID
 
 from etpproto.error import NotSupportedError
@@ -331,9 +331,6 @@ def _create_data_object(
 #  / ___ |/ /  / /  / /_/ / /_/ (__  )
 # /_/  |_/_/  /_/   \__,_/\__, /____/
 #                        /____/
-
-
-from typing import Type
 
 
 def get_array_class_from_dtype(
