@@ -124,8 +124,8 @@ def print_protocol_exception(pe: ProtocolException):
         log("Error recieved : " + str(pe))
     elif len(pe.errors) > 0:
         log(f"Errors recieved ({pe.errors}): ")
-        for code, pe in pe.errors.items():
-            log(f"\t{code}) {str(pe)}")
+        for code, err in pe.errors.items():
+            log(f"\t{code}) {str(err)}")
 
 
 @ETPConnection.on(CommunicationProtocol.CORE)
@@ -136,7 +136,7 @@ class CoreProtocolPrinter(CoreHandler):
         msg: OpenSession,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("OpenSession recieved")
         yield
 
@@ -145,7 +145,7 @@ class CoreProtocolPrinter(CoreHandler):
         msg: CloseSession,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_close_session")
         yield
 
@@ -154,7 +154,7 @@ class CoreProtocolPrinter(CoreHandler):
         msg: Ping,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_ping")
         yield Message.get_object_message(
             Pong(currentDateTime=int(datetime.utcnow().timestamp())),
@@ -166,7 +166,7 @@ class CoreProtocolPrinter(CoreHandler):
         msg: Pong,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_pong")
         yield
 
@@ -175,7 +175,7 @@ class CoreProtocolPrinter(CoreHandler):
         msg: ProtocolException,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         print_protocol_exception(msg)
         yield
 
@@ -212,7 +212,7 @@ class DiscoveryProtocolPrinter(DiscoveryHandler):
         msg: GetResourcesResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log(
             f"## myDiscoveryProtocol ## on_get_resources_response : nb[{len(msg.resources)}]",
         )
@@ -225,7 +225,7 @@ class DiscoveryProtocolPrinter(DiscoveryHandler):
         msg: ProtocolException,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         print_protocol_exception(msg)
         yield
 
@@ -270,7 +270,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
         msg: DeleteDataspaces,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_delete_dataspaces")
         yield
 
@@ -279,7 +279,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
         msg: GetDataspaces,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_dataspaces")
         yield
 
@@ -288,7 +288,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
         msg: PutDataspaces,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_put_dataspaces")
         yield
 
@@ -297,7 +297,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
         msg: DeleteDataspacesResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_delete_dataspaces_response")
         # log(msg, pretty=True)
         yield
@@ -308,7 +308,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
         msg: GetDataspacesResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_dataspaces_response")
         for dataspace in msg.dataspaces:
             print_dataspace(dataspace)
@@ -320,7 +320,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
         msg: PutDataspacesResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log(msg, pretty=True)
         yield
         # raise NotSupportedError()
@@ -350,7 +350,7 @@ class StoreProtocolPrinter(StoreHandler):
         msg: GetDataObjects,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_data_objects")
         yield
 
@@ -359,7 +359,7 @@ class StoreProtocolPrinter(StoreHandler):
         msg: PutDataObjects,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_put_data_objects")
         yield
 
@@ -368,7 +368,7 @@ class StoreProtocolPrinter(StoreHandler):
         msg: DeleteDataObjects,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_delete_data_objects")
         yield
 
@@ -377,7 +377,7 @@ class StoreProtocolPrinter(StoreHandler):
         msg: GetDataObjectsResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("# on_get_data_objects_response")
         # log(msg, pretty=True)
         for do in msg.data_objects.values():
@@ -398,7 +398,7 @@ class StoreProtocolPrinter(StoreHandler):
         msg: PutDataObjectsResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log(f"Success {len(msg.success)}:")
         for code, pr in msg.success.items():
             log(f"\t{code}) {str(pr.created_contained_object_uris)}")
@@ -442,7 +442,7 @@ class DataArrayHandlerPrinter(DataArrayHandler):
         msg: GetDataArrayMetadata,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_data_array_metadata")
         yield
 
@@ -460,7 +460,7 @@ class DataArrayHandlerPrinter(DataArrayHandler):
         msg: GetDataArrays,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_data_arrays")
         yield
 
@@ -469,7 +469,7 @@ class DataArrayHandlerPrinter(DataArrayHandler):
         msg: GetDataSubarrays,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_data_subarrays")
         yield
 
@@ -496,7 +496,7 @@ class DataArrayHandlerPrinter(DataArrayHandler):
         msg: PutDataArrays,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_put_data_arrays")
         yield
 
@@ -529,12 +529,13 @@ class DataArrayHandlerPrinter(DataArrayHandler):
 
 @ETPConnection.on(CommunicationProtocol.SUPPORTED_TYPES)
 class SupportedTypesProtocolPrinter(SupportedTypesHandler):
+
     async def on_get_supported_types(
         self,
         msg: GetSupportedTypes,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         log("@on_get_supported_types")
         yield
 
@@ -543,7 +544,7 @@ class SupportedTypesProtocolPrinter(SupportedTypesHandler):
         msg: GetSupportedTypesResponse,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         for st in msg.supported_types:
             log(f"\t{st.data_object_type}\t count : {str(st.object_count)}")
         yield
@@ -553,7 +554,7 @@ class SupportedTypesProtocolPrinter(SupportedTypesHandler):
         msg: ProtocolException,
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[Optional[Message], None]:
         print_protocol_exception(msg)
         yield
 
@@ -641,20 +642,20 @@ def computeCapability(supportedProtocolList_fun) -> ServerCapabilities:
     # log(protocolDict, pretty=True)
     print(list(filter(lambda p: p.protocol != 0, protocolDict)))
     return ServerCapabilities(
-        application_name="py_etp_client",
-        application_version="1.1.2",
-        supported_protocols=list(
+        applicationName="py_etp_client",
+        applicationVersion="1.1.2",
+        supportedProtocols=list(
             map(
                 lambda d: SupportedProtocol(
                     protocol=d.protocol,
-                    protocol_version=d.protocol_version,
+                    protocolVersion=d.protocol_version,
                     role="store" if d.protocol != 1 else "producer",
-                    protocol_capabilities=d.protocol_capabilities,
+                    protocolCapabilities=d.protocol_capabilities,
                 ),
                 list(filter(lambda p: p.protocol != 0, protocolDict)),
             )
         ),
-        supported_data_objects=[
+        supportedDataObjects=[
             # SupportedDataObject(
             #     qualified_type="resqml20.*",
             #     data_object_capabilities={}),
@@ -668,95 +669,95 @@ def computeCapability(supportedProtocolList_fun) -> ServerCapabilities:
             #                                           'SupportsPut': {'item': {'boolean': True}}}}
             #                                           )
             SupportedDataObject(
-                qualified_type="eml20.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="eml20.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="eml21.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="eml21.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="eml22.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="eml22.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="eml23.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="eml23.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="resqml20.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="resqml20.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="resqml22.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="resqml22.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="witsml20.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="witsml20.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="witsml21.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="witsml21.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="prodml20.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="prodml20.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
             SupportedDataObject(
-                qualified_type="prodml22.*",
-                data_object_capabilities={
-                    "SupportsDelete": DataValue(item=True),
-                    "SupportsPut": DataValue(item=True),
-                    "SupportsGet": DataValue(item=True),
+                qualifiedType="prodml22.*",
+                dataObjectCapabilities={
+                    "SupportsDelete": DataValue(item=True),  # type: ignore
+                    "SupportsPut": DataValue(item=True),  # type: ignore
+                    "SupportsGet": DataValue(item=True),  # type: ignore
                 },
             ),
         ],
         # supported_compression=["gzip"],
-        supported_formats=["xml"],
-        endpoint_capabilities={"MaxWebSocketMessagePayloadSize": DataValue(item=128000000)},
-        supported_encodings=["binary"],
-        contact_information=Contact(
-            organization_name="Geosiris",
-            contact_name="Gauthier Valentin",
-            contact_phone="",
-            contact_email="valentin.gauthier@geosiris.com",
+        supportedFormats=["xml"],  # type: ignore
+        endpointCapabilities={"MaxWebSocketMessagePayloadSize": DataValue(item=128000000)},  # type: ignore
+        supportedEncodings=["binary"],  # type: ignore
+        contactInformation=Contact(
+            organizationName="Geosiris",
+            contactName="Gauthier Valentin",
+            contactPhone="",
+            contactEmail="valentin.gauthier@geosiris.com",
         ),
     )
 

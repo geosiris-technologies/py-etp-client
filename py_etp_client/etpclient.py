@@ -1,8 +1,9 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import json
+import os
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 from energyml.utils.uri import Uri as ETPUri
@@ -13,6 +14,7 @@ from energyml.utils.serialization import (
     read_energyml_json_str,
     read_energyml_xml_bytes,
     read_energyml_xml_str,
+    JSON_VERSION,
 )
 
 from py_etp_client.etpsimpleclient import ETPSimpleClient
@@ -61,6 +63,7 @@ from py_etp_client import (
     PutDataObjects,
     PutDataObjectsResponse,
     PutDataspacesResponse,
+    Resource,
     RollbackTransaction,
     RollbackTransactionResponse,
     StartTransaction,
@@ -78,7 +81,7 @@ def read_energyml_obj(data: Union[str, bytes], format_: str) -> Any:
         if format_ == "xml":
             return read_energyml_xml_bytes(data)
         elif format_ == "json":
-            return read_energyml_json_bytes(data)
+            return read_energyml_json_bytes(data, json_version=JSON_VERSION.OSDU_OFFICIAL)
     else:
         raise ValueError("data must be a string or bytes")
 
@@ -114,7 +117,7 @@ class ETPClient(ETPSimpleClient):
     # / /___/ /_/ / /  /  __/
     # \____/\____/_/   \___/
 
-    def ping(self, timeout: Optional[int] = 5) -> bool:
+    def ping(self, timeout: int = 5) -> bool:
         """Ping the server.
 
         Args:
@@ -123,14 +126,14 @@ class ETPClient(ETPSimpleClient):
         Returns:
             bool: True if the server is reachable
         """
-        ping_msg_list = self.send_and_wait(Ping(current_date_time=epoch()), timeout=timeout)
+        ping_msg_list = self.send_and_wait(Ping(currentDateTime=epoch()), timeout=timeout)
         for ping_msg in ping_msg_list:
             if isinstance(ping_msg.body, ProtocolException):
                 return False
         return True
 
     def authorize(
-        self, authorization: str, supplementalAuthorization: Optional[dict] = None, timeout: Optional[int] = 5
+        self, authorization: str, supplementalAuthorization: Optional[dict] = None, timeout: int = 5
     ) -> Optional[Union[AuthorizeResponse, ProtocolException]]:
         """Authorize the client.
 
@@ -145,7 +148,10 @@ class ETPClient(ETPSimpleClient):
             Authorize(authorization=authorization, supplementalAuthorization=supplementalAuthorization or {}),
             timeout=timeout,
         )
-        return auth_msg_list[0].body
+        body = auth_msg_list[0].body
+        if isinstance(body, (AuthorizeResponse, ProtocolException)):
+            return body
+        return None
 
     #     ____        __
     #    / __ \____ _/ /_____ __________  ____ _________
@@ -153,7 +159,7 @@ class ETPClient(ETPSimpleClient):
     #  / /_/ / /_/ / /_/ /_/ (__  ) /_/ / /_/ / /__/  __/
     # /_____/\__,_/\__/\__,_/____/ .___/\__,_/\___/\___/
     #                           /_/
-    def get_dataspaces(self, timeout: Optional[int] = 5) -> List[Dataspace]:
+    def get_dataspaces(self, timeout: int = 5) -> Union[List[Dataspace], ProtocolException]:
         """Get dataspaces list.
 
         Args:
@@ -173,7 +179,7 @@ class ETPClient(ETPSimpleClient):
         return datasapaces
 
     def put_dataspace(
-        self, dataspace_names: List[str], custom_data=None, timeout: Optional[int] = 5
+        self, dataspace_names: List[str], custom_data=None, timeout: int = 5
     ) -> Union[Dict[str, Any], ProtocolException]:
         """
         @deprecated: Use put_dataspaces_with_acl instead.
@@ -208,7 +214,7 @@ class ETPClient(ETPSimpleClient):
         acl_viewers: Union[str, List[str]],
         legal_tags: Union[str, List[str]],
         other_relevant_data_countries: Union[str, List[str]],
-        timeout: Optional[int] = 5,
+        timeout: int = 5,
     ) -> Union[Dict[str, Any], ProtocolException]:
         """Put dataspaces with ACL and legal tags.
         /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
@@ -284,7 +290,7 @@ class ETPClient(ETPSimpleClient):
         )
 
     def delete_dataspace(
-        self, dataspace_names: List[str], timeout: Optional[int] = 5
+        self, dataspace_names: List[str], timeout: int = 5
     ) -> Union[Dict[str, Any], ProtocolException]:
         """Delete dataspaces.
 
@@ -313,8 +319,8 @@ class ETPClient(ETPSimpleClient):
     #                                        /____/
 
     def get_resources(
-        self, uri: str, depth: int = 1, scope: str = "self", types_filter: List[str] = None, timeout=10
-    ) -> Union[List[Any], ProtocolException]:
+        self, uri: str, depth: int = 1, scope: str = "self", types_filter: Optional[List[str]] = None, timeout=10
+    ) -> Union[List[Resource], ProtocolException]:
         """Get resources from the server.
 
         Args:
@@ -352,7 +358,7 @@ class ETPClient(ETPSimpleClient):
             List[str]: List of uris
         """
         allready_checked = []
-        to_check = []
+        to_check: List[str] = []
         if isinstance(uri, str):
             to_check.append(uri)
         elif isinstance(uri, list):
@@ -364,11 +370,15 @@ class ETPClient(ETPSimpleClient):
             allready_checked.append(uri)
             resources = self.get_resources(uri=uri, depth=2, scope=scope, timeout=timeout)
             for r in resources:
-                try:
-                    if r.uri not in allready_checked and r.uri not in to_check:
-                        to_check.append(r.uri)
-                except Exception as e:
-                    logging.error("Error: %s", e)
+                if isinstance(r, Resource):
+                    try:
+                        if r.uri not in allready_checked and r.uri not in to_check:
+                            to_check.append(r.uri)
+                    except Exception as e:
+                        logging.error("Error: %s", e)
+                        continue
+                else:
+                    logging.error("Error: %s", r)
                     continue
 
         return allready_checked
@@ -387,12 +397,15 @@ class ETPClient(ETPSimpleClient):
         resources = self.get_resources(uri=dataspace, timeout=timeout)
         uris = []
         for r in resources:
-            if uuid in r.uri:
+            if isinstance(r, Resource) and uuid in r.uri:
                 try:
                     uris.append(r.uri)
                 except Exception as e:
                     logging.error("Error: %s", e)
                     continue
+            else:
+                logging.error("Error: %s", r)
+                continue
         return uris
 
     #    _____ __
@@ -402,8 +415,8 @@ class ETPClient(ETPSimpleClient):
     # /____/\__/\____/_/   \___/
 
     def get_data_object(
-        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: Optional[int] = 5
-    ) -> Union[Dict[str, str], List[str], str, ProtocolException]:
+        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: int = 5
+    ) -> Optional[Union[Dict[str, str], List[str], str, ProtocolException]]:
         """Get data object from the server.
 
         Args:
@@ -434,13 +447,13 @@ class ETPClient(ETPSimpleClient):
             # remove starting and trailing spaces
             uris_dict[ui] = uris_dict[ui].strip()
 
-        gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format_=format_), timeout=timeout)
+        gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format=format_), timeout=timeout)
         data_obj = {}
 
         for gdor in gdor_msg_list:
             if isinstance(gdor.body, GetDataObjectsResponse):
                 data_obj.update({k: v.data for k, v in gdor.body.data_objects.items()})
-            else:
+            elif isinstance(gdor.body, ProtocolException):
                 # logging.error("Error: %s", gdor.body)
                 return gdor.body
 
@@ -456,7 +469,7 @@ class ETPClient(ETPSimpleClient):
         return res
 
     def get_data_object_as_obj(
-        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: Optional[int] = 5
+        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: int = 5
     ) -> Union[Dict[str, Any], List[Any], Any, ProtocolException]:
         # TODO : test if energyml.resqml or energyml.witsml exists in the dependencies
         objs = self.get_data_object(
@@ -496,7 +509,7 @@ class ETPClient(ETPSimpleClient):
 
         # do_dict = {"0": _create_data_object(obj_as_str=obj_content, dataspace_name=dataspace_name)}
 
-        pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
+        pdor_msg_list = self.send_and_wait(PutDataObjects(dataObjects=do_dict), timeout=timeout)
 
         res = {}
         for pdor in pdor_msg_list:
@@ -523,7 +536,7 @@ class ETPClient(ETPSimpleClient):
         for o in obj:
             do_dict[str(len(do_dict))] = _create_data_object(obj=o, dataspace_name=dataspace_name, format=format_)
 
-        pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
+        pdor_msg_list = self.send_and_wait(PutDataObjects(dataObjects=do_dict), timeout=timeout)
 
         res = {}
         for pdor in pdor_msg_list:
@@ -533,7 +546,7 @@ class ETPClient(ETPSimpleClient):
                 logging.error("Error: %s", pdor.body)
         return res
 
-    def delete_data_object(self, uris: Union[str, Dict, List], timeout: Optional[int] = 5) -> Dict[str, Any]:
+    def delete_data_object(self, uris: Union[str, Dict, List], timeout: int = 5) -> Dict[str, Any]:
         """Delete data object from the server.
 
         Args:
@@ -579,19 +592,34 @@ class ETPClient(ETPSimpleClient):
         if isinstance(file_path, str):
             file_path = [file_path]
 
-        do_dict = {}
+        file_path_checked = []
         for f in file_path:
+            if os.path.exists(f):
+                if os.path.isfile(f) and (f.endswith(".xml") or f.endswith(".json") or f.endswith(".epc")):
+                    file_path_checked.append(f)
+                elif os.path.isdir(f):
+                    for root, _, files in os.walk(f):
+                        for file in files:
+                            if file.endswith(".xml") or file.endswith(".json") or file.endswith(".epc"):
+                                file_path_checked.append(os.path.join(root, file))
+
+        do_dict = {}
+        for f in file_path_checked:
             if f.endswith(".xml") or f.endswith(".json"):
                 with open(f, "r") as file:
                     file_content = file.read()
                     do_dict[len(do_dict)] = _create_data_object(obj_as_str=file_content, dataspace_name=dataspace_name)
             elif f.endswith(".epc"):
                 epc = Epc.read_file(f)
-                for obj in epc.energyml_objects:
-                    if obj is not None:
-                        do_dict[len(do_dict)] = _create_data_object(obj=obj, dataspace_name=dataspace_name)
+                if epc is not None:
+                    for obj in epc.energyml_objects:
+                        if obj is not None:
+                            do_dict[len(do_dict)] = _create_data_object(obj=obj, dataspace_name=dataspace_name)
+                else:
+                    logging.error("Error: Cannot read EPC file %s", f)
+                    continue
 
-        pdor_msg_list = self.send_and_wait(PutDataObjects(data_objects=do_dict), timeout=timeout)
+        pdor_msg_list = self.send_and_wait(PutDataObjects(dataObjects=do_dict), timeout=timeout)
 
         res = {}
         for pdor in pdor_msg_list:
@@ -612,7 +640,7 @@ class ETPClient(ETPSimpleClient):
     # /_____/\__,_/\__/\__,_/_/  |_/_/  /_/   \__,_/\__, /
     #                                              /____/
 
-    def get_data_array(self, uri: str, path_in_resource: str, timeout: int = 5) -> np.ndarray:
+    def get_data_array(self, uri: str, path_in_resource: str, timeout: int = 5) -> Optional[np.ndarray]:
         """Get an array from the server.
 
         Args:
@@ -624,7 +652,7 @@ class ETPClient(ETPSimpleClient):
             np.ndarray: the array, reshaped in the correct dimension
         """
         gdar_msg_list = self.send_and_wait(
-            GetDataArrays(dataArrays={"0": DataArrayIdentifier(uri=uri, path_in_resource=path_in_resource)}),
+            GetDataArrays(dataArrays={"0": DataArrayIdentifier(uri=uri, pathInResource=path_in_resource)}),
             timeout=timeout,
         )
         array = None
@@ -665,11 +693,11 @@ class ETPClient(ETPSimpleClient):
         """
         gdar_msg_list = self.send_and_wait(
             GetDataSubarrays(
-                dataArrays={
+                dataSubarrays={
                     "0": GetDataSubarraysType(
                         uid=DataArrayIdentifier(uri=uri, pathInResource=path_in_resource),
-                        start=start,
-                        count=count,
+                        starts=start,  # type: ignore
+                        counts=count,  # type: ignore
                     )
                 }
             ),
@@ -677,7 +705,7 @@ class ETPClient(ETPSimpleClient):
         )
         array = None
         for gdar in gdar_msg_list:
-            if isinstance(gdar.body, GetDataSubarraysResponse) and "0" in gdar.body.data_arrays:
+            if isinstance(gdar.body, GetDataSubarraysResponse) and "0" in gdar.body.data_subarrays:
                 print(gdar)
                 if array is None:
                     array = np.array(gdar.body.data_subarrays["0"].data.item.values)
@@ -718,7 +746,7 @@ class ETPClient(ETPSimpleClient):
         self,
         uri: str,
         path_in_resource: str,
-        array_flat: Union[np.array, list],
+        array_flat: Union[np.ndarray, list],
         dimensions: List[int],
         timeout: int = 5,
     ) -> Dict[str, bool]:
@@ -741,8 +769,8 @@ class ETPClient(ETPSimpleClient):
             PutDataArrays(
                 dataArrays={
                     "0": PutDataArraysType(
-                        uid=DataArrayIdentifier(uri=str(uri), path_in_resource=path_in_resource),
-                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),
+                        uid=DataArrayIdentifier(uri=str(uri), pathInResource=path_in_resource),
+                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),  # type: ignore
                     )
                 }
             ),
@@ -851,7 +879,7 @@ class ETPClient(ETPSimpleClient):
             logging.warning("No active transaction to rollback")
         else:
             rtr_msg_list = self.send_and_wait(
-                RollbackTransaction(transaction_uuid=self.active_transaction), timeout=timeout
+                RollbackTransaction(transactionUuid=self.active_transaction), timeout=timeout
             )
             for rtr_msg in rtr_msg_list:
                 if isinstance(rtr_msg.body, RollbackTransactionResponse) and rtr_msg.body.successful:
@@ -875,7 +903,7 @@ class ETPClient(ETPSimpleClient):
             logging.warning("No active transaction to commit")
         else:
             ctr_msg_list = self.send_and_wait(
-                CommitTransaction(transaction_uuid=self.active_transaction), timeout=timeout
+                CommitTransaction(transactionUuid=self.active_transaction), timeout=timeout
             )
             for ctr_msg in ctr_msg_list:
                 if isinstance(ctr_msg.body, CommitTransactionResponse) and ctr_msg.body.successful:
@@ -885,3 +913,28 @@ class ETPClient(ETPSimpleClient):
                     logging.error("Error: %s", ctr_msg.body)
 
         return False
+
+    def commit_transaction_get_msg(self, timeout: int = 5) -> Tuple[bool, Optional[str]]:
+        """Commit a transaction.
+
+        Args:
+            timeout (int, optional): Defaults to 5.
+
+        Returns:
+            bool: True if the transaction has been successfully committed
+        """
+        if self.active_transaction is None:
+            logging.warning("No active transaction to commit")
+        else:
+            ctr_msg_list = self.send_and_wait(
+                CommitTransaction(transactionUuid=self.active_transaction), timeout=timeout
+            )
+            for ctr_msg in ctr_msg_list:
+                if isinstance(ctr_msg.body, CommitTransactionResponse):
+                    if ctr_msg.body.successful:
+                        self.active_transaction = None
+                    return ctr_msg.body.successful, ctr_msg.body.failure_reason
+                else:
+                    logging.error("Error: %s", ctr_msg.body)
+
+        return False, None

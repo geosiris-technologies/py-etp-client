@@ -31,13 +31,22 @@ if __H5PY_MODULE_EXISTS__:
 
 def start_client(config: Optional[ETPConfig] = None) -> ETPClient:
     config = config or ETPConfig()
+
+    add_h = config.ADDITIONAL_HEADERS
+
+    if isinstance(add_h, str):
+        try:
+            add_h = json.loads(add_h)
+        except json.JSONDecodeError:
+            add_h = {}
+
     client = ETPClient(
         url=config.URL,
         spec=ETPConnection(connection_type=ConnectionType.CLIENT),
         access_token=config.ACCESS_TOKEN,
         username=config.USERNAME,
         password=config.PASSWORD,
-        headers=config.ADDITIONAL_HEADERS,
+        headers=add_h or {},
         verify=True,
     )
     client.start()
@@ -178,11 +187,11 @@ def looper():
                 else:
                     print("Please provide a dataspace name for the transaction.")
             elif "commit" in command and "transaction" in command:
-                resp = client.commit_transaction()
+                resp, msg = client.commit_transaction_get_msg()
                 if resp:
                     print("Transaction committed.")
                 else:
-                    print("Failed to commit transaction.")
+                    print(f"Failed to commit transaction: {msg}")
             elif "rollback" in command and "transaction" in command:
                 resp = client.rollback_transaction()
                 if resp:
@@ -195,13 +204,16 @@ def looper():
             # ===============
 
             elif "supportedtype" in command:
-                resp = client.get_supported_types()
-                if resp:
-                    for st in resp:
-                        print(f"\t{st}")
-                    print("")
+                if args is not None and len(args) > 0:
+                    resp = client.get_supported_types(args[0])
+                    if resp:
+                        for st in resp:
+                            print(f"\t{st}")
+                        print("")
+                    else:
+                        print("No supported types found.")
                 else:
-                    print("No supported types found.")
+                    print("Please provide a dataspace name or uri")
 
             # ===============
             # Resource
@@ -211,7 +223,7 @@ def looper():
                 # if len(args) == 1 or len(args) >= 3:
                 resp = client.get_resources(
                     uri=args[0] if len(args) >= 1 else None,
-                    depth=args[1] if len(args) >= 2 else 1,
+                    depth=int(args[1]) if len(args) >= 2 else 1,
                     scope=args[2] if len(args) >= 3 else "self",
                     types_filter=args[3:] if len(args) >= 4 else None,
                     timeout=60,
@@ -220,7 +232,7 @@ def looper():
                     print(f"\t{len(resp)} resources found")
                     sorted_resp = sorted(resp, key=lambda x: x.uri)
                     for res in sorted_resp:
-                        print(f"\t\t{res.uri}  S[{res.source_count}] T[{res.target_count}]")
+                        print(f"\t\t{res.uri}  S[{res.source_count}] T[{res.target_count}] {res.name}")
                 elif isinstance(resp, ProtocolException):
                     print(f"\tError: {resp.error.code} : {resp.error.message}")
                 else:
@@ -230,8 +242,37 @@ def looper():
 
             elif "get" in command and "dataobj" in command:
                 if len(args) >= 1:
-                    resp = client.get_data_object(uris=args, format_="json" if "json" in command else "xml")
-                    print(resp)
+                    obj_format = "json" if "json" in command else "xml"
+                    resp = client.get_data_object(uris=args, format_=obj_format)
+
+                    if isinstance(resp, ProtocolException):
+                        print(f"Error: {resp.error.code} : {resp.error.message}")
+                        resp = None
+                    elif isinstance(resp, list):
+                        objs = []
+                        if "json" in command:
+                            print(f"type : {type(resp)} -- {len(resp)}\n {resp}")
+                            print(json.dumps([json.loads(r) for r in resp], indent=2))
+                        else:
+                            print(resp)
+
+                        objs = []
+                        for r in resp:
+                            try:
+                                o = read_energyml_obj(r, obj_format)
+                                objs.append(o)
+                            except Exception:
+                                pass
+
+                        array_seach_msg = ""
+                        for o in objs:
+                            piefs = get_path_in_external_with_path(o)
+                            if len(piefs) > 0:
+                                array_seach_msg += f"\t{get_obj_uri(o)} '{get_object_attribute(o, 'Citation.Title')}': {list(map(lambda p: p[1], piefs))}\n"
+
+                        if len(array_seach_msg) > 0:
+                            print(f"Found {len(objs)} objects with potential arrays:\n{array_seach_msg}")
+
                 else:
                     print("Please provide an object URI.")
             elif "put" in command and "dataobj" in command:
@@ -259,7 +300,7 @@ def looper():
 
             elif "get" in command and "dataarray" in command:
                 if len(args) >= 2:
-                    resp = client.get_data_array(uri=args[0], path_in_resource=args[1])
+                    resp = client.get_data_array(uri=args[0], path_in_resource=args[1], timeout=30)
                     print(resp)
                 else:
                     print("Please provide a data array URI and a pathInResource.")
@@ -296,6 +337,8 @@ def looper():
                             resp = client.put_data_array(
                                 uri=args[0],
                                 path_in_resource=args[1],
+                                array_flat=data,
+                                dimensions=list(data.shape),
                                 timeout=600,
                             )
                             if resp:
@@ -396,10 +439,50 @@ def looper():
                     print(
                         "Please provide a dataspace name and a folder path. After that, you can specify a list of types to filter (e.g. resqml22.TriangulatedSetRepresentation)."
                     )
+            elif "help" in command or "?" in command:
+                print(
+                    "Available commands:\n"
+                    "- exit/quit: Exit the program\n"
+                    "- close: Close the client connection\n"
+                    "- authorize <username> <password> or <access_token>: Authorize the client\n"
+                    "- ping: Ping the server\n\n"
+                    "===============\n"
+                    " Dataspace Commands\n"
+                    "===============\n"
+                    "- getDataspace: List all dataspaces\n"
+                    "- putDataspace <name>: Create a new dataspace\n"
+                    "- deleteDataspace <name>: Delete a dataspace\n\n"
+                    "===============\n"
+                    " Transaction Commands\n"
+                    "===============\n"
+                    "- startTransaction <dataspace_name>: Start a transaction in a dataspace\n"
+                    "- commitTransaction: Commit the current transaction\n"
+                    "- rollbackTransaction: Rollback the current transaction\n\n"
+                    "===============\n"
+                    " Resources Commands\n"
+                    "===============\n"
+                    "- getSupportedtype: List all supported types\n"
+                    "- getResource <uri> [depth] [scope] [types_filter]: Get resources from a dataspace\n\n"
+                    "===============\n"
+                    " DataObject Commands\n"
+                    "===============\n"
+                    "- getDataobj <uri> [format]: Get a data object by URI\n"
+                    "- putDataobj <dataspace_name> <file_path | folder_path>: Put data objects in a dataspace from a file (xml/json/epc) or a folder containing some.\n\n"
+                    "===============\n"
+                    " DataArray Commands\n"
+                    "===============\n"
+                    "- getDataarray <uri> <path_in_resource>: Get a data array by URI and path in resource\n"
+                    "- putDataarray <dataspace_name> <path_in_resource> [file_path]: Put a data array in a dataspace\n"
+                    "- download <dataspace_uri> <folder_path> [types_filter...]: Download resources from a dataspace to a folder\n"
+                )
             else:
                 print(f"Unknown command: {command}. Type 'exit' to quit.")
         except KeyboardInterrupt:
             break
+        except Exception as e:
+            traceback.print_exc()
+            logging.error(f"An error occurred: {e}")
+            print(f"An error occurred: {e}")
 
     client.close()
 

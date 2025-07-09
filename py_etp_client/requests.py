@@ -99,6 +99,7 @@ from energyml.utils.serialization import (
     serialize_xml,
     read_energyml_xml_bytes,
     read_energyml_json_bytes,
+    JSON_VERSION,
 )
 
 
@@ -152,7 +153,7 @@ def default_request_session():
         supportedFormats=ETPConnection.server_capabilities.supported_formats,
         currentDateTime=epoch(),
         endpointCapabilities={},
-        earliest_retained_change_time=0,
+        earliestRetainedChangeTime=0,
     )
     return rq
 
@@ -168,7 +169,7 @@ def default_request_session():
 def get_resources(
     uri: str = "eml:///",
     depth: int = 1,
-    scope=None,
+    scope: str = "self",
     data_object_types: Optional[List[str]] = None,
 ):
     if uri is not None:
@@ -193,14 +194,14 @@ def get_resources(
 
 def get_deleted_resources(
     dataspace: str,
-    delete_time_filter: int = None,
+    delete_time_filter: Optional[int] = None,
     data_object_types: list = [],
 ):
     ds_uri = "eml:///dataspace('" + dataspace + "')" if "eml:///" not in dataspace else dataspace
     return GetDeletedResources(
-        dataspace_uri=ds_uri,
-        delete_time_filter=delete_time_filter,
-        data_object_types=data_object_types,
+        dataspaceUri=ds_uri,
+        deleteTimeFilter=delete_time_filter,
+        dataObjectTypes=data_object_types,
     )
 
 
@@ -213,10 +214,10 @@ def get_deleted_resources(
 
 
 def get_dataspaces():
-    return GetDataspaces()
+    return GetDataspaces(storeLastWriteFilter=None)
 
 
-def put_dataspace(dataspace_names: list, custom_data: dict = None):
+def put_dataspace(dataspace_names: list, custom_data: Optional[dict] = None):
     ds_map = {}
     now = epoch()
 
@@ -232,10 +233,10 @@ def put_dataspace(dataspace_names: list, custom_data: dict = None):
     for ds_name in dataspace_names:
         ds_map[str(len(ds_map))] = Dataspace(
             uri=("eml:///dataspace('" + ds_name + "')" if "eml:///" not in ds_name else ds_name),
-            store_last_write=now,
-            store_created=now,
+            storeLastWrite=now,
+            storeCreated=now,
             path=ds_name,
-            custom_data=custom_data_reshaped or {},
+            customData=custom_data_reshaped or {},
         )
 
     return PutDataspaces(dataspaces=ds_map)
@@ -257,14 +258,14 @@ def delete_dataspace(dataspace_names: list):
 
 def delete_data_object(uris: list):
     return DeleteDataObjects(
-        uris={i: uris[i] for i in range(len(uris))},
-        prune_contained_objects=False,
+        uris={str(i): uris[i] for i in range(len(uris))},
+        pruneContainedObjects=False,
     )
 
 
-def _create_resource(obj: Any, dataspace_name: str = None) -> Resource:
+def _create_resource(obj: Any, dataspace_name: Optional[str] = None) -> Resource:
     ds_name = dataspace_name
-    if "eml:///" in ds_name:
+    if ds_name is not None and "eml:///" in ds_name:
         ds_name = parse_uri(ds_name).dataspace
 
     uri = str(get_obj_uri(obj, ds_name))
@@ -282,23 +283,23 @@ def _create_resource(obj: Any, dataspace_name: str = None) -> Resource:
     return Resource(
         uri=uri,
         name=get_object_attribute(obj, "Citation.Title"),
-        source_count=0,
-        target_count=nb_ref,
-        last_changed=last_changed,
-        store_last_write=date,
-        store_created=date,
-        active_status=ActiveStatusKind.ACTIVE,
-        alternate_uris=[],
-        custom_data={},
+        sourceCount=0,
+        targetCount=nb_ref,
+        lastChanged=last_changed,
+        storeLastWrite=date,
+        storeCreated=date,
+        activeStatus=ActiveStatusKind.ACTIVE,
+        alternateUris=[],
+        customData={},
     )
 
 
 def _create_data_object(
-    obj: Optional[Any] = None, obj_as_str: Optional[str] = None, format="xml", dataspace_name: str = None
+    obj: Optional[Any] = None, obj_as_str: Optional[str] = None, format="xml", dataspace_name: Optional[str] = None
 ):
     if obj is None and obj_as_str is None:
         raise ValueError("Either obj or obj_as_str must be provided")
-    if obj is None:
+    elif obj is None:
         try:
             if isinstance(obj_as_str, bytes):
                 obj = read_energyml_xml_bytes(obj_as_str)
@@ -306,9 +307,9 @@ def _create_data_object(
                 obj = read_energyml_xml_str(obj_as_str)
         except:
             if isinstance(obj_as_str, bytes):
-                obj = read_energyml_json_bytes(obj_as_str)
+                obj = read_energyml_json_bytes(obj_as_str, JSON_VERSION.OSDU_OFFICIAL)
             else:
-                obj = read_energyml_json_str(obj_as_str)[0]
+                obj = read_energyml_json_str(obj_as_str, JSON_VERSION.OSDU_OFFICIAL)[0]
             format = "json"
     elif obj_as_str is None:
         if format == "json":
@@ -332,11 +333,14 @@ def _create_data_object(
 #                        /____/
 
 
+from typing import Type
+
+
 def get_array_class_from_dtype(
     dtype: str,
-) -> Union[ArrayOfInt, ArrayOfLong, ArrayOfBoolean, ArrayOfFloat, ArrayOfDouble, ArrayOfBytes, ArrayOfString]:
+) -> Type[Union[ArrayOfInt, ArrayOfLong, ArrayOfBoolean, ArrayOfFloat, ArrayOfDouble, ArrayOfBytes, ArrayOfString]]:
     dtype_str = str(dtype)
-    print("dtype_str", dtype_str)
+    # print("dtype_str", dtype_str)
     if dtype_str.startswith("long") or dtype_str.startswith("int64"):
         return ArrayOfLong
     elif dtype_str.startswith("int") or dtype_str.startswith("unsign") or dtype_str.startswith("uint"):
@@ -405,7 +409,7 @@ def get_supported_types(
     print(f"==>  uri={uri}, count={count}, return_empty_types={return_empty_types}")
     return GetSupportedTypes(
         uri=uri,
-        count_objects=count,
-        return_empty_types=return_empty_types,
+        countObjects=count,
+        returnEmptyTypes=return_empty_types,
         scope=get_scope(scope),
     )
