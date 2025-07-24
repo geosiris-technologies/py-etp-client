@@ -1,7 +1,8 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import logging
-from typing import Any, List, Type, Union, AsyncGenerator, Optional
+import traceback
+from typing import Any, Dict, List, Type, Union, AsyncGenerator, Optional
 import uuid as pyUUID
 
 from etpproto.error import NotSupportedError
@@ -21,6 +22,7 @@ import numpy as np
 
 from py_etp_client import (
     Acknowledge,
+    AnyArrayType,
     ActiveStatusKind,
     AnyArray,
     ArrayOfBoolean,
@@ -91,6 +93,7 @@ from energyml.utils.introspection import (
     get_object_attribute,
     search_attribute_matching_type,
 )
+from energyml.utils.epc import get_property_kind_by_uuid
 from energyml.utils.uri import parse_uri
 from energyml.utils.serialization import (
     read_energyml_xml_str,
@@ -101,6 +104,21 @@ from energyml.utils.serialization import (
     read_energyml_json_bytes,
     JSON_VERSION,
 )
+
+
+def read_energyml_obj(data: Union[str, bytes], format_: str) -> Any:
+    if isinstance(data, str):
+        if format_ == "xml":
+            return read_energyml_xml_str(data)
+        elif format_ == "json":
+            return read_energyml_json_str(data)
+    elif isinstance(data, bytes):
+        if format_ == "xml":
+            return read_energyml_xml_bytes(data)
+        elif format_ == "json":
+            return read_energyml_json_bytes(data, json_version=JSON_VERSION.OSDU_OFFICIAL)
+    else:
+        raise ValueError("data must be a string or bytes")
 
 
 def get_scope(scope: str):
@@ -167,7 +185,7 @@ def default_request_session():
 
 
 def get_resources(
-    uri: str = "eml:///",
+    uri: Optional[str] = "eml:///",
     depth: int = 1,
     scope: str = "self",
     data_object_types: Optional[List[str]] = None,
@@ -299,30 +317,49 @@ def _create_data_object(
 ):
     if obj is None and obj_as_str is None:
         raise ValueError("Either obj or obj_as_str must be provided")
-    elif obj is None:
-        try:
-            if isinstance(obj_as_str, bytes):
-                obj = read_energyml_xml_bytes(obj_as_str)
-            else:
-                obj = read_energyml_xml_str(obj_as_str)
-        except:
-            if isinstance(obj_as_str, bytes):
-                obj = read_energyml_json_bytes(obj_as_str, JSON_VERSION.OSDU_OFFICIAL)
-            else:
-                obj = read_energyml_json_str(obj_as_str, JSON_VERSION.OSDU_OFFICIAL)[0]
-            format = "json"
+    elif obj is None and obj_as_str is not None:
+        obj = read_energyml_obj(obj_as_str, format_=format)
     elif obj_as_str is None:
         if format == "json":
             obj_as_str = serialize_json(obj)
         else:
             obj_as_str = serialize_xml(obj)
-
+    if isinstance(obj, list):  # in case of json parsing
+        if len(obj) == 0:
+            raise ValueError("obj cannot be an empty list")
+        obj = obj[0]
+    print(get_obj_uuid(obj))
     return DataObject(
-        data=obj_as_str,
+        data=obj_as_str.encode("utf-8") if isinstance(obj_as_str, str) else obj_as_str,
         blobId=pyUUID.UUID(get_obj_uuid(obj)).hex,
         resource=_create_resource(obj=obj, dataspace_name=dataspace_name),
         format=format,
     )
+
+
+def get_property_kind_and_parents(uuids: list) -> Dict[str, Any]:
+    """Get PropertyKind objects and their parents from a list of UUIDs.
+
+    Args:
+        uuids (list): List of PropertyKind UUIDs.
+
+    Returns:
+        Dict[str, Any]: A dictionary mapping UUIDs to PropertyKind objects and their parents.
+    """
+    dict_props: Dict[str, Any] = {}
+
+    for prop_uuid in uuids:
+        prop = get_property_kind_by_uuid(prop_uuid)
+        if prop is not None:
+            dict_props[prop_uuid] = prop
+            parent_uuid = get_object_attribute(prop, "parent.uuid")
+            if parent_uuid is not None and parent_uuid not in dict_props:
+                print(f"Adding parent {parent_uuid} for property {prop_uuid}")
+                dict_props = get_property_kind_and_parents([parent_uuid]) | dict_props
+        else:
+            logging.warning(f"PropertyKind with UUID {prop_uuid} not found.")
+            continue
+    return dict_props
 
 
 #     ___
@@ -355,6 +392,28 @@ def get_array_class_from_dtype(
     return ArrayOfFloat
 
 
+def get_any_array_type(
+    dtype: str,
+) -> AnyArrayType:
+    dtype_str = str(dtype)
+    # print("dtype_str", dtype_str)
+    if dtype_str.startswith("long") or dtype_str.startswith("int64"):
+        return AnyArrayType.ARRAY_OF_LONG
+    elif dtype_str.startswith("int") or dtype_str.startswith("unsign") or dtype_str.startswith("uint"):
+        return AnyArrayType.ARRAY_OF_INT
+    elif dtype_str.startswith("bool"):
+        return AnyArrayType.ARRAY_OF_BOOLEAN
+    elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
+        return AnyArrayType.ARRAY_OF_DOUBLE
+    elif dtype_str.startswith("float"):
+        return AnyArrayType.ARRAY_OF_FLOAT
+    elif dtype_str.startswith("bytes") or dtype_str.startswith("|S"):
+        return AnyArrayType.BYTES
+    elif dtype_str.startswith("str") or dtype_str.startswith("<U"):
+        return AnyArrayType.ARRAY_OF_STRING
+    return AnyArrayType.ARRAY_OF_FLOAT
+
+
 def get_any_array(
     array: Union[List[Any], np.ndarray],
 ) -> AnyArray:
@@ -373,14 +432,6 @@ def get_any_array(
     # logging.debug("\t@get_any_array: type array : %s", type(array.tolist()))
     # logging.debug("\t@get_any_array: type inside : %s", type(array.tolist()[0]))
     return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))
-
-
-if __name__ == "__main__":
-    print(get_any_array([1, 2, 3, 4, 5]))
-    print(get_any_array(np.array([[1.52, 2, 3], [4, 5, 6]])))
-    print(get_any_array(np.array([["1.52", "2", "3"], ["4", "5", "6"]])))
-    print(get_any_array(np.array([True, False, True])))
-    # print(get_any_array(np.array([b"hello", b"world"])))
 
 
 #    _____                              __           __   __
@@ -410,3 +461,15 @@ def get_supported_types(
         returnEmptyTypes=return_empty_types,
         scope=get_scope(scope),
     )
+
+
+#  __________________
+# /_____/_____/_____/
+
+
+if __name__ == "__main__":
+    print(get_any_array([1, 2, 3, 4, 5]))
+    print(get_any_array(np.array([[1.52, 2, 3], [4, 5, 6]])))
+    print(get_any_array(np.array([["1.52", "2", "3"], ["4", "5", "6"]])))
+    print(get_any_array(np.array([True, False, True])))
+    # print(get_any_array(np.array([b"hello", b"world"])))

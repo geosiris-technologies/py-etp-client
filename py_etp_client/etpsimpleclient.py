@@ -319,7 +319,7 @@ class ETPSimpleClient:
             if msg_id < 0:
                 msg_id = m_id
             logging.debug(f"@WS: [{m_id}]")
-            logging.debug(obj_msg)
+            # logging.debug(obj_msg)
 
         return msg_id
 

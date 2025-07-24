@@ -9,13 +9,8 @@ import numpy as np
 from energyml.utils.uri import Uri as ETPUri
 from energyml.utils.epc import Epc
 from energyml.utils.constants import epoch
-from energyml.utils.serialization import (
-    read_energyml_json_bytes,
-    read_energyml_json_str,
-    read_energyml_xml_bytes,
-    read_energyml_xml_str,
-    JSON_VERSION,
-)
+from py_etp_client.requests import get_any_array_type, read_energyml_obj
+
 
 from py_etp_client.etpsimpleclient import ETPSimpleClient
 from py_etp_client import RequestSession, GetDataObjects
@@ -32,10 +27,13 @@ from py_etp_client.requests import (
     delete_dataspace,
 )
 from py_etp_client import (
+    Uuid,
     Authorize,
     AuthorizeResponse,
+    AnyArrayType,
     CommitTransaction,
     CommitTransactionResponse,
+    AnyLogicalArrayType,
     DataArray,
     DataArrayIdentifier,
     DataArrayMetadata,
@@ -68,22 +66,10 @@ from py_etp_client import (
     RollbackTransactionResponse,
     StartTransaction,
     StartTransactionResponse,
+    PutUninitializedDataArrays,
+    PutUninitializedDataArraysResponse,
+    PutUninitializedDataArrayType,
 )
-
-
-def read_energyml_obj(data: Union[str, bytes], format_: str) -> Any:
-    if isinstance(data, str):
-        if format_ == "xml":
-            return read_energyml_xml_str(data)
-        elif format_ == "json":
-            return read_energyml_json_str(data)
-    elif isinstance(data, bytes):
-        if format_ == "xml":
-            return read_energyml_xml_bytes(data)
-        elif format_ == "json":
-            return read_energyml_json_bytes(data, json_version=JSON_VERSION.OSDU_OFFICIAL)
-    else:
-        raise ValueError("data must be a string or bytes")
 
 
 class ETPClient(ETPSimpleClient):
@@ -220,6 +206,7 @@ class ETPClient(ETPSimpleClient):
         /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
         See. https://community.opengroup.org/osdu/platform/domain-data-mgmt-services/reservoir/open-etp-server/-/issues/168#note_370528
         and https://community.opengroup.org/osdu/platform/domain-data-mgmt-services/reservoir/open-etp-server#osdu-integration
+        and https://community.opengroup.org/osdu/platform/domain-data-mgmt-services/reservoir/open-etp-server/-/blob/main/docs/bestPracticesForClients.md?ref_type=heads
 
         Args:
             dataspace_names (List[str]): List of dataspace names
@@ -319,7 +306,12 @@ class ETPClient(ETPSimpleClient):
     #                                        /____/
 
     def get_resources(
-        self, uri: str, depth: int = 1, scope: str = "self", types_filter: Optional[List[str]] = None, timeout=10
+        self,
+        uri: Optional[str],
+        depth: int = 1,
+        scope: str = "self",
+        types_filter: Optional[List[str]] = None,
+        timeout=10,
     ) -> Union[List[Resource], ProtocolException]:
         """Get resources from the server.
 
@@ -367,7 +359,7 @@ class ETPClient(ETPSimpleClient):
 
         while len(to_check) > 0:
             uri = to_check.pop(0)
-            allready_checked.append(uri)
+            allready_checked.append(str(uri))
             resources = self.get_resources(uri=uri, depth=2, scope=scope, timeout=timeout)
             for r in resources:
                 if isinstance(r, Resource):
@@ -491,7 +483,7 @@ class ETPClient(ETPSimpleClient):
         return objs
 
     def put_data_object_str(
-        self, obj_content: Union[str, List], dataspace_name: str, timeout: int = 5
+        self, obj_content: Union[str, List], dataspace_name: str, format: str = "xml", timeout: int = 5
     ) -> Dict[str, Any]:
         """Put data object to the server.
 
@@ -505,7 +497,9 @@ class ETPClient(ETPSimpleClient):
 
         do_dict = {}
         for o in obj_content:
-            do_dict[str(len(do_dict))] = _create_data_object(obj_as_str=o, dataspace_name=dataspace_name)
+            do_dict[str(len(do_dict))] = _create_data_object(
+                obj_as_str=o, dataspace_name=dataspace_name, format=format
+            )
 
         # do_dict = {"0": _create_data_object(obj_as_str=obj_content, dataspace_name=dataspace_name)}
 
@@ -520,12 +514,12 @@ class ETPClient(ETPSimpleClient):
         return res
 
     def put_data_object_obj(
-        self, obj: Any, dataspace_name: str, format_: str = "xml", timeout: int = 5
+        self, obj: Union[Any, List[Any]], dataspace_name: str, format_: str = "xml", timeout: int = 5
     ) -> Dict[str, Any]:
         """Put data object to the server.
 
         Args:
-            obj (Any): An object that must be an instance of a class from energyml.(witsml|resqml|prodml|eml) python module or at least having the similar attributes, OR a list of such objects.
+            obj (Any): An object (or a list of objects) that must be an instance of a class from energyml.(witsml|resqml|prodml|eml) python module or at least having the similar attributes, OR a list of such objects.
             dataspace_name (str): Dataspace name
             timeout (int, optional): Defaults to 5.
         """
@@ -603,13 +597,19 @@ class ETPClient(ETPSimpleClient):
                             if file.endswith(".xml") or file.endswith(".json") or file.endswith(".epc"):
                                 file_path_checked.append(os.path.join(root, file))
 
+        logging.info("Files to be uploaded: %s", file_path_checked)
         do_dict = {}
         for f in file_path_checked:
-            if f.endswith(".xml") or f.endswith(".json"):
+            flw = f.lower()
+            if flw.endswith(".xml") or flw.endswith(".json"):
                 with open(f, "r") as file:
                     file_content = file.read()
-                    do_dict[len(do_dict)] = _create_data_object(obj_as_str=file_content, dataspace_name=dataspace_name)
-            elif f.endswith(".epc"):
+                    do_dict[len(do_dict)] = _create_data_object(
+                        obj_as_str=file_content,
+                        dataspace_name=dataspace_name,
+                        format="xml" if flw.endswith(".xml") else "json",
+                    )
+            elif flw.endswith(".epc"):
                 epc = Epc.read_file(f)
                 if epc is not None:
                     for obj in epc.energyml_objects:
@@ -706,7 +706,7 @@ class ETPClient(ETPSimpleClient):
         array = None
         for gdar in gdar_msg_list:
             if isinstance(gdar.body, GetDataSubarraysResponse) and "0" in gdar.body.data_subarrays:
-                print(gdar)
+                # print(gdar)
                 if array is None:
                     array = np.array(gdar.body.data_subarrays["0"].data.item.values)
                 else:
@@ -741,6 +741,58 @@ class ETPClient(ETPSimpleClient):
             else:
                 logging.error("Error: %s", gdar.body)
         return metadata
+
+    def put_uninitialized_data_array(
+        self,
+        uri: str,
+        path_in_resource: str,
+        dimensions: List[int],
+        data_type: Union[str, AnyArrayType] = "float64",
+        logical_array_type: AnyLogicalArrayType = AnyLogicalArrayType.ARRAY_OF_FLOAT32_BE,
+        custom_data: Optional[Dict[str, Any]] = None,
+        preffered_subarray_dimensions: Optional[List[int]] = None,
+        timeout: int = 5,
+    ) -> bool:
+        """Put an uninitialized data array to the server.
+
+        Args:
+            uri (str): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            path_in_resource (str): path to the array. Must be the same than in the original object
+            dimensions (List[int]): dimensions of the array (as list of int)
+            data_type (str, optional): Data type of the array. Defaults to "float64".
+            timeout (int, optional): Defaults to 5.
+
+        Returns:
+            bool: True if the array has been successfully put
+        """
+        pdar_msg_list = self.send_and_wait(
+            PutUninitializedDataArrays(
+                dataArrays={
+                    "0": PutUninitializedDataArrayType(
+                        uid=DataArrayIdentifier(uri=str(uri), pathInResource=path_in_resource),
+                        metadata=DataArrayMetadata(
+                            dimensions=dimensions,  # type: ignore
+                            transportArrayType=(
+                                data_type if isinstance(data_type, AnyArrayType) else get_any_array_type(data_type)
+                            ),
+                            logicalArrayType=logical_array_type,
+                            storeLastWrite=epoch(),
+                            storeCreated=epoch(),
+                            customData=custom_data or {},
+                            preferredSubarrayDimensions=preffered_subarray_dimensions or [],  # type: ignore
+                        ),
+                    )
+                }
+            ),
+            timeout=timeout,
+        )
+
+        for pdar in pdar_msg_list:
+            if isinstance(pdar.body, PutUninitializedDataArraysResponse):
+                return pdar.body.success.get(str(uri), False)
+            else:
+                logging.error("Error: %s", pdar.body)
+        return False
 
     def put_data_array(
         self,
@@ -782,7 +834,7 @@ class ETPClient(ETPSimpleClient):
             if isinstance(pdar.body, PutDataArraysResponse):
                 res.update(pdar.body.success)
             else:
-                logging.info("Data array put failed: %s", pdar.body)
+                logging.info("Data array put failed: %s ==> %s", pdar, pdar.body)
 
         return res
 
@@ -825,7 +877,7 @@ class ETPClient(ETPSimpleClient):
 
     def start_transaction(
         self, dataspace: Union[str, List[str]], readonly: bool = False, msg: str = "", timeout: int = 5
-    ) -> Optional[int]:
+    ) -> Optional[Uuid]:
         """Start a transaction.
 
         Args:
@@ -841,7 +893,10 @@ class ETPClient(ETPSimpleClient):
 
         for i, ds in enumerate(dataspaceUris):
             if not ds.startswith("eml:///"):
-                dataspaceUris[i] = f"eml:///dataspace('{ds}')"
+                if ds is not None:
+                    dataspaceUris[i] = f"eml:///dataspace('{ds}')"
+                else:
+                    dataspaceUris[i] = "eml:///"
 
         if self.active_transaction is not None:
             logging.warning("A transaction is already active, please commit it before starting a new one")
@@ -931,8 +986,8 @@ class ETPClient(ETPSimpleClient):
             )
             for ctr_msg in ctr_msg_list:
                 if isinstance(ctr_msg.body, CommitTransactionResponse):
-                    if ctr_msg.body.successful:
-                        self.active_transaction = None
+                    # if ctr_msg.body.successful:  # It seems that if the commit failed, the transaction is not active anymore (tested on OSDU RDDMS)
+                    self.active_transaction = None
                     return ctr_msg.body.successful, ctr_msg.body.failure_reason
                 else:
                     logging.error("Error: %s", ctr_msg.body)

@@ -436,14 +436,14 @@ xsdata = {version = ">=24.0,<25.0", extras = ["lxml"]}
 
 [[package]]
 name = "energyml-utils"
-version = "1.8.4"
+version = "1.8.5.dev6"
 description = "Energyml helper"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = ">=3.9,<4.0"
 groups = ["main"]
 files = [
-    {file = "energyml_utils-1.8.4-py3-none-any.whl", hash = "sha256:7ca8fa445df5775cbff735aa84a32c40ff215d56f8460e61b65a83d9e7bebc60"},
-    {file = "energyml_utils-1.8.4.tar.gz", hash = "sha256:dc10ddf0366ba5a55f599bfd18cb6288598246316a90fdb5aed4068b173128c9"},
+    {file = "energyml_utils-1.8.5.dev6-py3-none-any.whl", hash = "sha256:a16684ea9c4f3ee6374fccd8d2c6a0b3367643a121ba85eecafb2f26cb14ec61"},
+    {file = "energyml_utils-1.8.5.dev6.tar.gz", hash = "sha256:45e1b266584d746c98db617978bd60315652da4c4da44a75901bd34a009b8e34"},
 ]
 
 [package.dependencies]
@@ -453,6 +453,11 @@ xsdata = {version = ">=24.0,<25.0", extras = ["cli", "lxml"]}
 [package.extras]
 hdf5 = ["h5py (>=3.7.0,<4.0.0)"]
 parquet = ["numpy (>=1.16.6,<2.0.0)", "pyarrow (>=14.0.1,<15.0.0)"]
+
+[package.source]
+type = "legacy"
+url = "https://test.pypi.org/simple"
+reference = "test-pypi"
 
 [[package]]
 name = "energyml-witsml2-0"
@@ -982,14 +987,14 @@ testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
 name = "poetry-dynamic-versioning"
-version = "1.9.0"
+version = "1.9.1"
 description = "Plugin for Poetry to enable dynamic versioning based on VCS tags"
 optional = false
 python-versions = "<4.0,>=3.7"
 groups = ["dev"]
 files = [
-    {file = "poetry_dynamic_versioning-1.9.0-py3-none-any.whl", hash = "sha256:0c65adf9b55e312fe1b49b5d0516a1bb61fdc4067f7ca64cdf1ed553df892fc5"},
-    {file = "poetry_dynamic_versioning-1.9.0.tar.gz", hash = "sha256:e54329743f05b677be976eaaa90ca4c269818e6f75d62eef8fd5af4576af7e7e"},
+    {file = "poetry_dynamic_versioning-1.9.1-py3-none-any.whl", hash = "sha256:65a0c814e6d30d4807734a3c34edf261fd7cc3b340dbd23b6a33ee41f7d0b547"},
+    {file = "poetry_dynamic_versioning-1.9.1.tar.gz", hash = "sha256:d6e7b9df817aa2ca4946cd695c6c89e1379d2e6c640f008a9b6170d081a9da48"},
 ]
 
 [package.dependencies]
@@ -1414,4 +1419,4 @@ hdf5 = ["h5py"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "3f9c713c3d1b54538397d6bbfb1d2b34eb6e78370a0b027309f2ef3cd9421e0a"
+content-hash = "6b942110980ddcbe8444b6333902b88167f11ec3682551f3a1aa4ded2f6fb810"
