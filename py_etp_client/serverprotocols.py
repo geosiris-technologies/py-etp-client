@@ -399,9 +399,9 @@ class StoreProtocolPrinter(StoreHandler):
         msg_header: MessageHeader,
         client_info: Union[None, ClientInfo] = None,
     ) -> AsyncGenerator[Optional[Message], None]:
-        log(f"Success {len(msg.success)}:")
-        for code, pr in msg.success.items():
-            log(f"\t{code}) {str(pr.created_contained_object_uris)}")
+        # log(f"@on_put_data_objects_response Success {len(msg.success)}:")
+        # for code, pr in msg.success.items():
+        #     log(f"\t@on_put_data_objects_response {code}) {str(pr.created_contained_object_uris)}")
         yield
 
     async def on_delete_data_objects_response(

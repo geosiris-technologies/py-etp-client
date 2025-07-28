@@ -1,7 +1,10 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+from dotenv import load_dotenv
+
 import json
+import os
 import ssl
 import threading
 from typing import Optional, Any, List
@@ -10,7 +13,7 @@ import time
 import logging
 
 from etpproto.connection import ETPConnection, ConnectionType
-from etpproto.messages import Message
+from etpproto.messages import Message, decode_binary_message
 
 from etpproto.client_info import ClientInfo
 from etptypes.energistics.etp.v12.protocol.core.request_session import (
@@ -31,6 +34,11 @@ from py_etp_client.serverprotocols import (
     SupportedTypesProtocolPrinter,
     TransactionHandlerPrinter,
 )
+
+MSG_ID_LOGGER = logging.getLogger("MSG_ID_LOGGER")
+
+load_dotenv()
+DEBUG = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
 
 
 class ETPSimpleClient:
@@ -106,6 +114,12 @@ class ETPSimpleClient:
         elif isinstance(headers, list):
             for a_h in headers or []:
                 self.headers = self.headers | a_h
+        elif isinstance(headers, str):
+            try:
+                self.headers = json.loads(headers)
+            except json.JSONDecodeError:
+                logging.error(f"Invalid JSON string for headers: {headers}")
+                self.headers = {}
 
         # Access token :
         if self.access_token is not None and len(self.access_token) > 0:
@@ -315,10 +329,15 @@ class ETPSimpleClient:
         ) in self.spec.send_msg_and_error_generator(
             obj_msg, None  # type: ignore
         ):
+            if DEBUG:
+                # only use for debugging
+                _dg_msg = Message.decode_binary_message(msg_to_send, ETPConnection.generic_transition_table)
+                MSG_ID_LOGGER.debug(
+                    f"[{self.url}] Sending: [{m_id:0>4.0f} ==> {_dg_msg.header.message_id:0>4.0f}] {type(_dg_msg.body)} final ? {_dg_msg.is_final_msg()}"
+                )
             self.ws.send(msg_to_send, websocket.ABNF.OPCODE_BINARY)
             if msg_id < 0:
                 msg_id = m_id
-            logging.debug(f"@WS: [{m_id}]")
             # logging.debug(obj_msg)
 
         return msg_id

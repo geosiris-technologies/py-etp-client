@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from io import BytesIO
+import json
 import logging
 import os
 from typing import Dict
@@ -7,18 +8,18 @@ import h5py
 import numpy as np
 from typingx import List, Union, Optional, Any
 from energyml.utils.epc import Epc
+from energyml.utils.validation import validate_epc, MissingEntityError
 from energyml.utils.uri import Uri as EtpUri, parse_uri
 from energyml.utils.serialization import read_energyml_xml_str, read_energyml_json_str
 from energyml.utils.introspection import get_obj_uri, get_obj_uuid, get_object_attribute
 from energyml.utils.constants import path_last_attribute
 from energyml.utils.data.datasets_io import (
     get_path_in_external_with_path,
+    h5_list_datasets,
     HDF5FileWriter,
     HDF5FileReader,
-    h5_list_datasets,
 )
-from example.py_etp_client_example.ui import start_client
-from py_etp_client.etpclient import ETPClient
+from py_etp_client.etpclient import ETPClient, start_client
 
 
 from py_etp_client import (
@@ -51,7 +52,7 @@ class DataStorage:
         if self.epc is not None:
             if "source" in scope.lower():
                 rels = self.epc.compute_rels()
-
+        # TODO: Implement this for EPC data storage
         raise Exception("Method not implemented for EPC data storage.")
 
         if self.etp_client is not None:
@@ -270,9 +271,14 @@ def transfert_data(
 
     filtered_uris = objects_uris
     if not overwrite_existing:
+
+        def tmp(x):
+            # print(f"===> {x}")
+            return parse_uri(x.uri).uuid
+
         existing_uuids = list(
             map(
-                lambda r: parse_uri(r.uri).uuid,
+                lambda r: tmp(r),
                 etp_client_target.get_resources(uri=etp_client_target.dataspace, depth=1, scope="targetOrSelf"),
             )
         )
@@ -287,7 +293,7 @@ def transfert_data(
     logging.debug(f"Transferring {len(filtered_uris)} objects from source to target ETP client.")
     logging.info(f"Transferring objects: {filtered_uris}")
 
-    objs_xml = etp_client_source.get_data_object(uris=filtered_uris, format_="xml", timeout=timeouts)
+    objs_xml: List[str] = etp_client_source.get_data_object(uris=filtered_uris, format_="xml", timeout=timeouts)
     # objs = etp_client_source.get_data_object_as_obj(uris=filtered_uris, format_="xml", timeout=timeouts)
     if not objs_xml:
         logging.warning("No objects found to transfer.")
@@ -299,7 +305,16 @@ def transfert_data(
         logging.error(f"Failed to start transaction on target ETP client: {e}")
         return
 
-    res = etp_client_target.put_data_objects(objects=objs_xml, format_="xml", timeout=timeouts)
+    res = []
+    for i in range(int(len(objs_xml) / 3)):
+        res.extend(
+            etp_client_target.put_data_objects(
+                objects=objs_xml[i * 3 : (i + 1) * 3],
+                format_="xml",
+                timeout=timeouts,
+            )
+        )
+    # res = etp_client_target.put_data_objects(objects=objs_xml, format_="xml", timeout=timeouts)
     logging.debug(f"Put data object response: {res}")
 
     objs = [read_energyml_obj(o, format_="xml") for o in objs_xml]
@@ -342,6 +357,7 @@ def transfert_data(
                                     overwrite_existing=False,
                                     timeouts=timeouts,
                                 )
+                                objects_uris.append(uri)
                     else:
                         logging.error(
                             f"Failed to find hdfProxy UUID in path: {path}. "
@@ -369,6 +385,7 @@ def transfert_data(
                     uri_target = parse_uri(uri)  # Ensure uri is valid
                     uri_target.dataspace = etp_client_target.dataspace or dataspace_out
                     uri_target = str(uri_target)
+                    logging.debug(f"uri in filter list: {_search_uri_from_uuid(filtered_uris, get_obj_uuid(o))}")
                     logging.debug(
                         f"Putting data array to target ETP client: {uri_target}, path: {path}, dimensions: {list(array.shape)} pief: {pief}, timeout: {timeouts}"
                     )
@@ -382,8 +399,57 @@ def transfert_data(
                     )
 
     try:
+        # debug : listing all entities in the target ETP client
+        target_object_list = []
+        if etp_client_target.etp_client is not None:
+            target_object_list = list(
+                map(
+                    lambda r: r.uri,
+                    etp_client_target.etp_client.get_resources(
+                        uri=etp_client_target.dataspace,
+                        depth=1,
+                        scope="targetOrSelf",
+                    ),
+                )
+            )
+
         if not etp_client_target.commit_transaction():
             print("Failed to commit transaction on target ETP client. Please check the logs for details.")
+            logging.debug(
+                f"Transaction failed to commit on target ETP client. These are the uploaded objects: {filtered_uris}"
+            )
+            # To debug missing entities :
+            epc = Epc(energyml_objects=objs)
+
+            errs = validate_epc(epc)
+
+            logging.debug(f"Objects validation [FULL]: \n{json.dumps([err.toJson() for err in errs], indent=4)}")
+
+            logging.debug("Objects validation [SHORT]: \n")
+            missing_list = []
+            for err in errs:
+                if isinstance(err, MissingEntityError):
+                    miss_uuid = err.missing_uuid
+                    miss_uri = _search_uri_from_uuid(target_object_list, miss_uuid)
+                    if miss_uri is None and miss_uuid not in missing_list:
+                        missing_list.append(miss_uuid)
+                        logging.error(f"Missing entity with UUID {miss_uuid} has no corresponding URI in the source.")
+            logging.debug(f"[END] Objects validation, nb missing entities found : {len(missing_list)}")
+
+            not_uploaded_uris = list(
+                filter(
+                    lambda u: u is not None,
+                    [
+                        u if _search_uri_from_uuid(target_object_list, parse_uri(u).uuid) is None else None
+                        for u in filtered_uris
+                    ],
+                )
+            )
+            logging.debug(
+                f"Not uploaded objects uris [{len(not_uploaded_uris)}]: {json.dumps(not_uploaded_uris, indent=4)}\n"
+            )
+            logging.debug(f"Supposed uploaded objects [{len(filtered_uris)}]: {json.dumps(filtered_uris, indent=4)}\n")
+
     except Exception as e:
         logging.error(f"Failed to commit transaction on target ETP client: {e}")
         print(e)
@@ -408,8 +474,12 @@ if __name__ == "__main__":
         uris=[
             # "eml:///dataspace('demo/Volve')/resqml20.obj_GridConnectionSetRepresentation(2efbb020-a489-4037-87b0-7204784f7c0c)"
             # "eml:///dataspace('demo/Volve')/resqml20.obj_DiscreteProperty(1d189a27-2f6e-445e-8720-58eb7e8e3ddf)"
-            "eml:///dataspace('demo/Volve')/resqml20.TriangulatedSetRepresentation(092fd2e8-6ab0-4076-8b8b-912e6112dfa1)"
+            # "eml:///dataspace('demo/Volve')/resqml20.TriangulatedSetRepresentation(092fd2e8-6ab0-4076-8b8b-912e6112dfa1)"
             # "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(3befef85-a866-479a-b41e-ef24036087a0)"  # aws f52
+            "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(2e497a63-4dac-4da3-96f0-c57ff29f6e75)",  # aws f3
+            "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(b013f6c9-43c4-408d-8c4a-42b8ab337d0c)",  # aws f8
+            # "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(a1753655-3aac-43ad-a146-84cc821654ae)",  # aws f10
+            # "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(ae7a4a88-f54c-4516-8987-31a61b8108b7)",  # aws f20
         ],
         include_references=True,
         timeouts=120,

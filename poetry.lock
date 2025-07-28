@@ -1419,4 +1419,4 @@ hdf5 = ["h5py"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "6b942110980ddcbe8444b6333902b88167f11ec3682551f3a1aa4ded2f6fb810"
+content-hash = "e594455de14d6c21620b365720c1400c967706053408a297e2099828f3b86c8d"
