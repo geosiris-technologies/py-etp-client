@@ -1,7 +1,10 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+from dotenv import load_dotenv
+
 import json
+import os
 import ssl
 import threading
 from typing import Optional, Any, List
@@ -10,7 +13,7 @@ import time
 import logging
 
 from etpproto.connection import ETPConnection, ConnectionType
-from etpproto.messages import Message
+from etpproto.messages import Message, decode_binary_message
 
 from etpproto.client_info import ClientInfo
 from etptypes.energistics.etp.v12.protocol.core.request_session import (
@@ -31,6 +34,11 @@ from py_etp_client.serverprotocols import (
     SupportedTypesProtocolPrinter,
     TransactionHandlerPrinter,
 )
+
+MSG_ID_LOGGER = logging.getLogger("MSG_ID_LOGGER")
+
+load_dotenv()
+DEBUG = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
 
 
 class ETPSimpleClient:
@@ -106,13 +114,19 @@ class ETPSimpleClient:
         elif isinstance(headers, list):
             for a_h in headers or []:
                 self.headers = self.headers | a_h
+        elif isinstance(headers, str):
+            try:
+                self.headers = json.loads(headers)
+            except json.JSONDecodeError:
+                logging.error(f"Invalid JSON string for headers: {headers}")
+                self.headers = {}
 
         # Access token :
         if self.access_token is not None and len(self.access_token) > 0:
             if "bearer" not in self.access_token.lower():
                 self.access_token = f"Bearer {self.access_token}"
             self.headers["Authorization"] = self.access_token
-        elif username is not None:
+        elif username is not None and password is not None:
             self.headers["Authorization"] = "Basic " + basic_auth_encode(username, password)
 
         # SSL
@@ -139,7 +153,7 @@ class ETPSimpleClient:
             req_sess = default_request_session()
             # logging.debug("Sending RequestSession")
             # logging.debug(req_sess.json(by_alias=True, indent=4))
-            answer = self.send(req_sess, 4.0)
+            answer = self.send(req_sess, 4)
             logging.info(f"CONNECTED : {answer}")
         except Exception as e:
             logging.error(e)
@@ -192,13 +206,24 @@ class ETPSimpleClient:
             message,
             dict_map_pro_to_class=ETPConnection.generic_transition_table,
         )
+
+        if not isinstance(recieved, Message):
+            logging.error(f"Received message is not an instance of Message: {type(recieved)} : {recieved}")
+            return
+
         if recieved.is_final_msg():
             logging.info(f"\n##> recieved header : {recieved.header}")
             logging.info(f"##> body type : {type(recieved.body)}")
 
+        if self.spec is None:
+            logging.error(
+                "ETPConnection spec is not defined for this client. A default one should have been created. Check other logs for errors."
+            )
+            return
+
         async def handle_msg(conn: ETPConnection, client, msg: bytes):
             try:
-                if message:
+                if message is not None and self.spec is not None:
                     async for b_msg in self.spec.handle_bytes_generator(message):
                         pass
 
@@ -239,7 +264,9 @@ class ETPSimpleClient:
             TimeoutError: If no response is received within timeout
             RuntimeError: If WebSocket connection is closed while waiting
         """
+        t_start_send = time.time()
         msg_id = self.send(req=req, timeout=timeout)
+        logging.debug(f"[PERF] Message sent in {time.time() - t_start_send:.2f} seconds")
 
         # Create event that will be triggered by on_message or on_close
         event = threading.Event()
@@ -255,6 +282,7 @@ class ETPSimpleClient:
 
         # Passive waiting - simply wait on the event with timeout
         if not event.wait(timeout):
+            logging.debug(f"[PERF] timeout after {timeout} seconds for message ID: {msg_id}")
             # Timeout occurred
             with self.lock:
                 self.pending_requests.pop(msg_id, None)
@@ -272,6 +300,7 @@ class ETPSimpleClient:
 
         # Get the response
         with self.lock:
+            logging.debug(f"[PERF] message {msg_id} received after {time.time() - t_start_send:.2f} seconds")
             _, response = self.pending_requests.pop(msg_id, (None, None))
             if hasattr(self, "_connection_closed_events"):
                 self._connection_closed_events.discard(event)
@@ -288,16 +317,28 @@ class ETPSimpleClient:
 
         obj_msg = Message.get_object_message(etp_object=req)
 
+        if not isinstance(obj_msg, Message):
+            raise TypeError(f"Expected an instance of Message, got {type(obj_msg)}")
+
+        assert self.spec is not None, "ETPConnection spec must be defined before sending messages."
+
         msg_id = -1
         for (
             m_id,
             msg_to_send,
-        ) in self.spec.send_msg_and_error_generator(obj_msg, None):
+        ) in self.spec.send_msg_and_error_generator(
+            obj_msg, None  # type: ignore
+        ):
+            if DEBUG:
+                # only use for debugging
+                _dg_msg = Message.decode_binary_message(msg_to_send, ETPConnection.generic_transition_table)
+                MSG_ID_LOGGER.debug(
+                    f"[{self.url}] Sending: [{m_id:0>4.0f} ==> {_dg_msg.header.message_id:0>4.0f}] {type(_dg_msg.body)} final ? {_dg_msg.is_final_msg()}"
+                )
             self.ws.send(msg_to_send, websocket.ABNF.OPCODE_BINARY)
             if msg_id < 0:
                 msg_id = m_id
-            logging.debug(f"@WS: [{m_id}]")
-            logging.debug(obj_msg)
+            # logging.debug(obj_msg)
 
         return msg_id
 
@@ -309,4 +350,4 @@ class ETPSimpleClient:
         """
         # logging.debug(self.spec)
         # return self.spec.is_connected
-        return self.spec.is_connected and not self.closed
+        return self.spec is not None and self.spec.is_connected and not self.closed
