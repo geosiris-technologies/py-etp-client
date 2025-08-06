@@ -19,7 +19,8 @@ priority = "explicit"
 
 [tool.poetry.dependencies]
 # py_etp_client = "^1.0.5"
-py_etp_client = { file = "../dist/py_etp_client-1.0.6.dev3-py3-none-any.whl" }
+# py_etp_client = { file = "../dist/py_etp_client-1.0.6.dev3-py3-none-any.whl" }
+py_etp_client = { version = "^1.0.6.dev3", source = "test-pypi" }
 energyml-utils = "^1.8.3"
 
 
