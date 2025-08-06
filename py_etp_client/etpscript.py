@@ -306,10 +306,12 @@ def transfert_data(
         return
 
     res = []
-    for i in range(int(len(objs_xml) / 3)):
+    NB_OBJECTS_PER_PUT = 1
+    # Split the objects into chunks of NB_OBJECTS_PER_PUT
+    for i in range(int(len(objs_xml) / NB_OBJECTS_PER_PUT)):
         res.extend(
             etp_client_target.put_data_objects(
-                objects=objs_xml[i * 3 : (i + 1) * 3],
+                objects=objs_xml[i * NB_OBJECTS_PER_PUT : (i + 1) * NB_OBJECTS_PER_PUT],
                 format_="xml",
                 timeout=timeouts,
             )
@@ -412,8 +414,8 @@ def transfert_data(
                     ),
                 )
             )
-
-        if not etp_client_target.commit_transaction():
+        commit_result = etp_client_target.commit_transaction()
+        if not commit_result:
             print("Failed to commit transaction on target ETP client. Please check the logs for details.")
             logging.debug(
                 f"Transaction failed to commit on target ETP client. These are the uploaded objects: {filtered_uris}"
@@ -463,7 +465,7 @@ if __name__ == "__main__":
     etp_client_source = start_client()
     print(etp_client_source.get_dataspaces())
     target = start_client(ETPConfig(os.environ.get("INI_FILE_PATH_2")))
-    dataspace_out = "maap/volve"
+    dataspace_out = "geosiris/volve"
     # dataspace_out = "test-workflow-aws"
     # target = Epc(epc_file_path="D:/pyetpclient_tranfert.epc")
 

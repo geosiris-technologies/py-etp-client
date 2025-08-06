@@ -148,6 +148,9 @@ from etptypes.energistics.etp.v12.protocol.discovery.get_resources import (
 from etptypes.energistics.etp.v12.protocol.discovery.get_resources_response import (
     GetResourcesResponse,
 )
+from etptypes.energistics.etp.v12.protocol.discovery.get_resources_edges_response import (
+    GetResourcesEdgesResponse,
+)
 from etptypes.energistics.etp.v12.protocol.store.delete_data_objects import (
     DeleteDataObjects,
 )

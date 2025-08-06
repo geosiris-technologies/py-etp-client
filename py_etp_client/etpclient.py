@@ -197,7 +197,7 @@ class ETPClient(ETPSimpleClient):
 
     def put_dataspaces_with_acl(
         self,
-        dataspace_names: List[str],
+        dataspace_names: Union[str, List[str]],
         acl_owners: Union[str, List[str]],
         acl_viewers: Union[str, List[str]],
         legal_tags: Union[str, List[str]],
@@ -232,8 +232,8 @@ class ETPClient(ETPSimpleClient):
             else:
                 acl_owners = [acl_owners]
 
-        if isinstance(acl_owners, list):
-            acl_owners = json.dumps(acl_owners)
+        # if isinstance(acl_owners, list):
+        # acl_owners = json.dumps(acl_owners)
 
         if isinstance(acl_viewers, str):
             viewers_obj = json.loads(acl_viewers)
@@ -242,8 +242,8 @@ class ETPClient(ETPSimpleClient):
             else:
                 acl_viewers = [acl_viewers]
 
-        if isinstance(acl_viewers, list):
-            acl_viewers = json.dumps(acl_viewers)
+        # if isinstance(acl_viewers, list):
+        # acl_viewers = json.dumps(acl_viewers)
 
         # Checking legal tags
         if isinstance(legal_tags, str):
@@ -253,8 +253,8 @@ class ETPClient(ETPSimpleClient):
             else:
                 legal_tags = [legal_tags]
 
-        if isinstance(legal_tags, list):
-            legal_tags = json.dumps(legal_tags)
+        # if isinstance(legal_tags, list):
+        # legal_tags = json.dumps(legal_tags)
 
         # Checking other relevant data countries
         if isinstance(other_relevant_data_countries, str):
@@ -264,9 +264,20 @@ class ETPClient(ETPSimpleClient):
             else:
                 other_relevant_data_countries = [other_relevant_data_countries]
 
-        if isinstance(other_relevant_data_countries, list):
-            other_relevant_data_countries = json.dumps(other_relevant_data_countries)
+        # if isinstance(other_relevant_data_countries, list):
+        #     other_relevant_data_countries = json.dumps(other_relevant_data_countries)
 
+        logging.info(
+            f"Creating dataspaces: {dataspace_names} with custom data: %s",
+            json.dumps(
+                {
+                    "viewers ": acl_viewers,
+                    "owners": acl_owners,
+                    "legaltags": legal_tags,
+                    "otherRelevantDataCountries": other_relevant_data_countries,
+                }
+            ),
+        )
         return self.put_dataspace(
             dataspace_names=dataspace_names,
             custom_data={
@@ -313,6 +324,7 @@ class ETPClient(ETPSimpleClient):
         depth: int = 1,
         scope: str = "self",
         types_filter: Optional[List[str]] = None,
+        include_edges: bool = False,
         timeout=10,
     ) -> Union[List[Resource], ProtocolException]:
         """Get resources from the server.
@@ -327,7 +339,9 @@ class ETPClient(ETPSimpleClient):
         Returns:
             List[Resource]: List of resources
         """
-        gr_msg_list = self.send_and_wait(get_resources(uri, depth, scope, types_filter), timeout=timeout)
+        gr_msg_list = self.send_and_wait(
+            get_resources(uri, depth, scope, types_filter, include_edges=include_edges), timeout=timeout
+        )
 
         resources = []
         for gr in gr_msg_list:
@@ -472,7 +486,7 @@ class ETPClient(ETPSimpleClient):
             timeout=timeout,
         )
 
-        if isinstance(objs, str):
+        if isinstance(objs, str) or isinstance(objs, bytes):
             return read_energyml_obj(objs, format_)
         elif isinstance(objs, dict):
             for k, v in objs.items():
@@ -997,8 +1011,7 @@ class ETPClient(ETPSimpleClient):
         return False, None
 
 
-def start_client() -> ETPClient:
-    config = ETPConfig()
+def start_client(config: ETPConfig = ETPConfig()) -> ETPClient:
     client = ETPClient(
         url=config.URL,
         spec=ETPConnection(connection_type=ConnectionType.CLIENT),

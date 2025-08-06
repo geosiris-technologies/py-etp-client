@@ -21,6 +21,7 @@ from py_etp_client import (
     Authorize,
     AuthorizeResponse,
     GetResourcesResponse,
+    GetResourcesEdgesResponse,
     GetDeletedResourcesResponse,
     Acknowledge,
     DeleteDataspaces,
@@ -243,6 +244,16 @@ class DiscoveryProtocolPrinter(DiscoveryHandler):
             else:
                 log("No deleted resource found for this context")
 
+        yield
+
+    async def on_get_resources_edges_response(
+        self,
+        msg: GetResourcesEdgesResponse,
+        msg_header: MessageHeader,
+        client_info: Union[None, ClientInfo] = None,
+    ) -> AsyncGenerator[Optional[Message], None]:
+        for edge in msg.edges:
+            log(f"Edge from {edge.source_uri} to {edge.target_uri} with type {edge.relationship_kind}")
         yield
 
     async def on_acknowledge(

@@ -24,6 +24,11 @@ class ETPConfig:
     TOKEN_REFRESH_TOKEN = os.getenv("TOKEN_REFRESH_TOKEN")
     USE_REST = os.getenv("USE_REST", "false").lower() == "true"
 
+    ACL_OWNERS = os.getenv("ACL_OWNERS", "[]")
+    ACL_VIEWERS = os.getenv("ACL_VIEWERS", "[]")
+    LEGAL_TAGS = os.getenv("LEGAL_TAGS", "[]")
+    OTHER_RELEVANT_DATA_COUNTRIES = os.getenv("OTHER_RELEVANT_DATA_COUNTRIES", "[]")
+
     # Path to YAML file (from .env)
     INI_FILE_PATH = os.getenv("INI_FILE_PATH")
 
@@ -69,6 +74,10 @@ class ETPConfig:
             "TOKEN_REFRESH_TOKEN": self.TOKEN_REFRESH_TOKEN,
             "USE_REST": self.USE_REST,
             "INI_FILE_PATH": self.INI_FILE_PATH,
+            "ACL_OWNERS": self.ACL_OWNERS,
+            "ACL_VIEWERS": self.ACL_VIEWERS,
+            "LEGAL_TAGS": self.LEGAL_TAGS,
+            "OTHER_RELEVANT_DATA_COUNTRIES": self.OTHER_RELEVANT_DATA_COUNTRIES,
         }
 
     def to_json(self):

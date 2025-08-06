@@ -189,6 +189,7 @@ def get_resources(
     depth: int = 1,
     scope: str = "self",
     data_object_types: Optional[List[str]] = None,
+    include_edges: bool = False,
 ):
     if uri is not None:
         if not uri.startswith("eml:///"):
@@ -206,7 +207,7 @@ def get_resources(
         countObjects=False,
         storeLastWriteFilter=None,
         activeStatusFilter=ActiveStatusKind.INACTIVE,
-        includeEdges=False,
+        includeEdges=include_edges,
     )
 
 
@@ -256,6 +257,10 @@ def put_dataspace(dataspace_names: list, custom_data: Optional[dict] = None):
             path=ds_name,
             customData=custom_data_reshaped or {},
         )
+
+    print(f"custom_data_reshaped: {custom_data_reshaped}")
+
+    print(PutDataspaces(dataspaces=ds_map).json())
 
     return PutDataspaces(dataspaces=ds_map)
 
