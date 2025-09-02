@@ -52,6 +52,7 @@ class ETPSimpleClient:
         password: Optional[str] = None,
         headers: Optional[dict] = None,
         verify: Optional[Any] = None,
+        max_reconnect_attempts: int = 5,
         req_session: Optional[RequestSession] = None,
     ):
         """Initializes the ETPSimpleClient with the given parameters.
@@ -89,6 +90,7 @@ class ETPSimpleClient:
         self.sslopt = None
         # Cache for received msg
         self.recieved_msg_dict = {}
+        self.max_reconnect_attempts = max_reconnect_attempts
 
         # Dictionary to store waiting requests {message_id: (Event, response)}
         self.pending_requests = {}
@@ -159,21 +161,53 @@ class ETPSimpleClient:
             logging.error(e)
 
     def _run_websocket(self):
-        """Runs the WebSocket connection in a separate thread."""
+        """Runs the WebSocket connection in a separate thread with configurable reconnection attempts."""
         print(self.headers)
-        self.ws = websocket.WebSocketApp(
-            self.url,
-            subprotocols=[ETPConnection.SUB_PROTOCOL],
-            header=self.headers,
-            on_open=self.on_open,
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
-        )
-        logging.info(f"Connecting to {self.url} ...")
-        if self.sslopt:
-            self.ws.run_forever(sslopt=self.sslopt, reconnect=True)
-        self.ws.run_forever(sslopt=self.sslopt, reconnect=True)
+
+        reconnect_count = 0
+
+        while reconnect_count <= self.max_reconnect_attempts and not self.stop_event.is_set():
+            try:
+                self.ws = websocket.WebSocketApp(
+                    self.url,
+                    subprotocols=[ETPConnection.SUB_PROTOCOL],
+                    header=self.headers,
+                    on_open=self.on_open,
+                    on_message=self.on_message,
+                    on_error=self.on_error,
+                    on_close=self.on_close,
+                )
+
+                logging.info(
+                    f"Connecting to {self.url} ... (attempt {reconnect_count + 1}/{self.max_reconnect_attempts + 1})"
+                )
+
+                if self.sslopt:
+                    self.ws.run_forever(sslopt=self.sslopt, reconnect=False)
+                else:
+                    self.ws.run_forever(reconnect=False)
+
+                # Connection closed normally
+                if self.stop_event.is_set():
+                    logging.info("Connection stopped by user request")
+                    break
+
+            except Exception as e:
+                logging.error(f"WebSocket connection failed (attempt {reconnect_count + 1}): {e}")
+
+            reconnect_count += 1
+
+            if reconnect_count <= self.max_reconnect_attempts and not self.stop_event.is_set():
+                # Exponential backoff: 2, 4, 8, 16, 30 seconds
+                wait_time = min(2**reconnect_count, 30)
+                logging.info(f"Reconnecting in {wait_time} seconds...")
+                if self.stop_event.wait(wait_time):
+                    break
+            else:
+                if reconnect_count > self.max_reconnect_attempts:
+                    logging.error(f"Maximum reconnection attempts ({self.max_reconnect_attempts}) reached")
+                self.closed = True
+                break
 
     def start(self):
         """Start the WebSocket connection in a separate thread."""
