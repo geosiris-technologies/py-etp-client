@@ -1,5 +1,44 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
+"""
+ETP Client Module
+
+This module provides ETPClient, a high-level client for ETP (Energistics Transfer Protocol)
+operations. ETPClient extends ETPSimpleClient with advanced functionality for energy industry
+data management, including data objects, dataspaces, data arrays, and transactions.
+
+The client inherits the complete event listener system from ETPSimpleClient, enabling
+reactive programming patterns and event-driven architectures for ETP applications.
+
+Key Components:
+- ETPClient: High-level ETP client with advanced data management capabilities
+- Data object operations (CRUD)
+- Dataspace management
+- Data array handling for large datasets
+- Transaction support for atomic operations
+- Resource discovery and type querying
+- Inherited event listener system for reactive programming
+
+Example Usage:
+    ```python
+    from py_etp_client.etpclient import ETPClient
+    from py_etp_client.etpsimpleclient import EventType
+
+    # Create client with event handling
+    def handle_connection(event_type: EventType, **kwargs):
+        if event_type == EventType.ON_OPEN:
+            print("Connected to ETP server")
+
+    client = ETPClient(url="wss://etp-server.com", spec=None)
+    client.add_listener(EventType.ON_OPEN, handle_connection)
+
+    # Start and use high-level operations
+    client.start()
+    dataspaces = client.get_dataspaces()
+    ```
+
+For detailed information about the event listener system, see ETPSimpleClient documentation.
+"""
 import json
 import os
 import logging
@@ -75,6 +114,75 @@ from py_etp_client import (
 
 
 class ETPClient(ETPSimpleClient):
+    """
+    High-level ETP (Energistics Transfer Protocol) client with advanced functionality.
+
+    ETPClient extends ETPSimpleClient with additional methods for working with ETP data objects,
+    dataspaces, data arrays, and transactions. It provides a comprehensive API for interacting
+    with ETP servers in energy industry applications.
+
+    Key Features:
+    - All ETPSimpleClient functionality including event listener system
+    - Data object management (get, put, delete)
+    - Dataspace operations
+    - Data array handling with support for large arrays
+    - Transaction management (start, commit, rollback)
+    - Resource discovery and supported types querying
+    - Ping/pong connectivity testing
+    - Authorization handling
+
+    Inherited Event Listener System:
+    ------------------------------
+    ETPClient inherits the complete event listener paradigm from ETPSimpleClient.
+    You can register listeners for connection events, errors, messages, and lifecycle events.
+
+    Available Event Types (from EventType enum):
+    - ON_OPEN: WebSocket connection established
+    - ON_CLOSE: WebSocket connection closed
+    - ON_ERROR: Error occurred
+    - ON_MESSAGE: Message received
+    - START: Client starting
+    - STOP: Client stopping
+    - CLOSE: Client closing
+
+    Example with Event Listeners:
+    ```python
+    from py_etp_client.etpclient import ETPClient
+    from py_etp_client.etpsimpleclient import EventType
+
+    def handle_events(event_type: EventType, **kwargs):
+        if event_type == EventType.ON_ERROR:
+            print(f"ETP Error: {kwargs.get('error')}")
+        elif event_type == EventType.ON_MESSAGE:
+            print(f"ETP Message received")
+
+    client = ETPClient(url="wss://example.com", spec=None)
+    client.add_listener(EventType.ON_ERROR, handle_events)
+    client.add_listener(EventType.ON_MESSAGE, handle_events)
+
+    # Use high-level methods
+    client.start()
+    dataspaces = client.get_dataspaces()
+    ```
+
+    Transaction Support:
+    -------------------
+    ETPClient provides transaction management for operations that need to be atomic:
+    - start_transaction(): Begin a new transaction
+    - commit_transaction(): Commit the current transaction
+    - rollback_transaction(): Rollback the current transaction
+
+    Data Management:
+    ---------------
+    - get_data_objects(): Retrieve data objects by URI
+    - put_data_objects(): Store data objects
+    - delete_data_objects(): Remove data objects
+    - get_data_arrays(): Retrieve data arrays
+    - put_data_arrays(): Store data arrays
+
+    See ETPSimpleClient documentation for detailed information about the event listener system.
+    """
+
     def __init__(
         self,
         url,
@@ -86,6 +194,35 @@ class ETPClient(ETPSimpleClient):
         verify: Optional[Any] = None,
         req_session: Optional[RequestSession] = None,
     ):
+        """
+        Initialize the ETPClient with connection parameters.
+
+        ETPClient extends ETPSimpleClient with high-level data management operations
+        while inheriting the complete event listener system. All listener functionality
+        from the parent class is available (add_listener, remove_listener, EventType enum).
+
+        Args:
+            url: WebSocket URL to connect to
+            spec: ETPConnection specification to use
+            access_token: Access token for authentication (optional)
+            username: Username for basic authentication (optional, ignored if access_token provided)
+            password: Password for basic authentication (optional, ignored if access_token provided)
+            headers: Additional headers for WebSocket request (optional)
+            verify: SSL verification options (optional)
+            req_session: RequestSession object to use (optional, default created if None)
+
+        Example:
+            ```python
+            from py_etp_client.etpclient import ETPClient
+            from py_etp_client.etpsimpleclient import EventType
+
+            def error_handler(event_type: EventType, **kwargs):
+                print(f"Error: {kwargs.get('error')}")
+
+            client = ETPClient(url="wss://server.com", spec=None)
+            client.add_listener(EventType.ON_ERROR, error_handler)
+            ```
+        """
         super().__init__(
             url=url,
             spec=spec,

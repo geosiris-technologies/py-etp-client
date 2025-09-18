@@ -1,13 +1,44 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
+"""
+ETP Simple Client Module
+
+This module provides ETPSimpleClient, a WebSocket client for ETP (Energistics Transfer Protocol)
+connections. The client supports asynchronous message handling, authentication, automatic
+reconnection, and a comprehensive event listener system.
+
+Key Features:
+- WebSocket-based ETP protocol communication
+- Basic and Bearer token authentication support
+- Automatic reconnection with exponential backoff
+- Message correlation and response waiting
+- Event listener paradigm for reactive programming
+
+The event listener system allows you to register callback functions that are triggered
+when specific events occur (connection open/close, errors, messages, start/stop operations).
+This enables building reactive applications that respond to ETP client state changes.
+
+Example:
+    ```python
+    from py_etp_client.etpsimpleclient import ETPSimpleClient, EventType
+
+    def handle_events(event_type: EventType, **kwargs):
+        print(f"Event: {event_type.value}")
+
+    client = ETPSimpleClient(url="wss://example.com", spec=None)
+    client.add_listener(EventType.ON_OPEN, handle_events)
+    client.start()
+    ```
+"""
 import asyncio
 from dotenv import load_dotenv
+from enum import Enum
 
 import json
 import os
 import ssl
 import threading
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Callable, Dict
 import websocket
 import time
 import logging
@@ -41,6 +72,31 @@ load_dotenv()
 DEBUG = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
 
 
+class EventType(Enum):
+    """Enum defining the types of events that can trigger listeners.
+
+    Each event type corresponds to a specific operation or state change in the ETP client.
+    Listeners registered for these events will be called with relevant context data.
+
+    Event Types and their context data (**kwargs):
+    - ON_OPEN: WebSocket connection established (ws)
+    - ON_CLOSE: WebSocket connection closed (ws, close_status_code, close_msg)
+    - ON_ERROR: Error occurred (ws, error)
+    - ON_MESSAGE: Message received (ws, message, received)
+    - START: Client starting (no additional args)
+    - STOP: Client stopping (no additional args)
+    - CLOSE: Client closing (no additional args)
+    """
+
+    ON_OPEN = "on_open"
+    ON_CLOSE = "on_close"
+    ON_ERROR = "on_error"
+    ON_MESSAGE = "on_message"
+    START = "start"
+    STOP = "stop"
+    CLOSE = "close"
+
+
 class ETPSimpleClient:
 
     def __init__(
@@ -60,6 +116,45 @@ class ETPSimpleClient:
         It handles the connection, sending and receiving messages, and managing the connection state.
         It also provides a method to send messages and wait for responses.
 
+        Event Listener System:
+        ---------------------
+        The client supports a listener paradigm that allows you to register callback functions
+        to be notified when specific events occur. This enables reactive programming patterns
+        and decoupled event handling.
+
+        Available Event Types (from EventType enum):
+        - ON_OPEN: Triggered when WebSocket connection is established
+        - ON_CLOSE: Triggered when WebSocket connection is closed
+        - ON_ERROR: Triggered when an error occurs
+        - ON_MESSAGE: Triggered when a message is received
+        - START: Triggered when the client starts
+        - STOP: Triggered when the client stops gracefully
+        - CLOSE: Triggered when the client initiates a close operation
+
+        Listener Functions:
+        - Must accept (event_type: EventType, **kwargs) as parameters
+        - event_type: The EventType enum value indicating which event occurred
+        - **kwargs: Event-specific data (e.g., ws, error, message, close_status_code, etc.)
+
+        Example Usage:
+        ```python
+        def my_listener(event_type: EventType, **kwargs):
+            if event_type == EventType.ON_ERROR:
+                print(f"Error occurred: {kwargs.get('error')}")
+            elif event_type == EventType.ON_MESSAGE:
+                print(f"Message received: {kwargs.get('message')}")
+
+        client = ETPSimpleClient(url="wss://example.com", spec=None)
+        client.add_listener(EventType.ON_ERROR, my_listener)
+        client.add_listener(EventType.ON_MESSAGE, my_listener)
+        ```
+
+        Listener Management:
+        - add_listener(event_type, callback): Register a listener function
+        - remove_listener(event_type, callback): Unregister a specific listener
+        - Multiple listeners can be registered for the same event type
+        - Listener exceptions are caught and logged without affecting client operation
+
         Args:
             url (str): The WebSocket URL to connect to.
             spec (Optional[ETPConnection]): The ETPConnection specification to use.
@@ -68,6 +163,7 @@ class ETPSimpleClient:
             password (Optional[str], optional): Password for basic authentication (ignored if access_token is provided). Defaults to None.
             headers (Optional[dict], optional): Additional headers to include in the WebSocket request. Defaults to None.
             verify (Optional[Any], optional): SSL verification options. Defaults to None.
+            max_reconnect_attempts (int, optional): Maximum number of reconnection attempts. Defaults to 5.
             req_session (Optional[RequestSession], optional): RequestSession object to use. If None provided, a default one will be created. Defaults to None.
         """
         self.url = url
@@ -131,12 +227,68 @@ class ETPSimpleClient:
         elif username is not None and password is not None:
             self.headers["Authorization"] = "Basic " + basic_auth_encode(username, password)
 
+        # Listener infrastructure
+        self.listeners: Dict[EventType, List[Callable[..., None]]] = {event_type: [] for event_type in EventType}
+
         # SSL
         if isinstance(verify, bool) and not verify:
             self.sslopt = {"cert_reqs": ssl.CERT_NONE}
 
+    def add_listener(self, event_type: EventType, callback: Callable[..., None]) -> None:
+        """
+        Register a listener function for a specific event type.
+
+        Args:
+            event_type (EventType): The type of event to listen for
+            callback (Callable[..., None]): Function to call when the event occurs.
+                                           It will receive the event_type as first argument,
+                                           followed by **kwargs containing event-specific data.
+        """
+        if not isinstance(event_type, EventType):
+            raise ValueError(f"event_type must be an instance of EventType, got {type(event_type)}")
+
+        if not callable(callback):
+            raise ValueError("callback must be callable")
+
+        self.listeners[event_type].append(callback)
+
+    def remove_listener(self, event_type: EventType, callback: Callable[..., None]) -> bool:
+        """
+        Unregister a listener function for a specific event type.
+
+        Args:
+            event_type (EventType): The type of event to stop listening for
+            callback (Callable[..., None]): The exact function reference that was registered
+
+        Returns:
+            bool: True if the listener was found and removed, False otherwise
+        """
+        if not isinstance(event_type, EventType):
+            raise ValueError(f"event_type must be an instance of EventType, got {type(event_type)}")
+
+        try:
+            self.listeners[event_type].remove(callback)
+            return True
+        except ValueError:
+            return False
+
+    def _notify_listeners(self, event_type: EventType, **kwargs) -> None:
+        """
+        Internal method to notify all registered listeners for a specific event type.
+
+        Args:
+            event_type (EventType): The type of event that occurred
+            **kwargs: Event-specific data to pass to the listeners
+        """
+        for callback in self.listeners[event_type]:
+            try:
+                callback(event_type, **kwargs)
+            except Exception as e:
+                logging.error(f"Error in listener {callback.__name__} for event {event_type.value}: {e}")
+
     def on_error(self, ws, error):
         logging.info(f"Error: {error}")
+        self._notify_listeners(EventType.ON_ERROR, ws=ws, error=error)
 
     def on_close(self, ws, close_status_code, close_msg):
         """Handle WebSocket closure and notify all waiting operations."""
@@ -149,6 +301,8 @@ class ETPSimpleClient:
             for event in list(self._connection_closed_events):
                 event.set()
 
+        self._notify_listeners(EventType.ON_CLOSE, ws=ws, close_status_code=close_status_code, close_msg=close_msg)
+
     def on_open(self, ws):
         logging.info("Connected to WebSocket!")
         try:
@@ -159,6 +313,8 @@ class ETPSimpleClient:
             logging.info(f"CONNECTED : {answer}")
         except Exception as e:
             logging.error(e)
+
+        self._notify_listeners(EventType.ON_OPEN, ws=ws)
 
     def _run_websocket(self):
         """Runs the WebSocket connection in a separate thread with configurable reconnection attempts."""
@@ -216,6 +372,8 @@ class ETPSimpleClient:
             self.thread.start()
             time.sleep(1)  # Allow time for connection
 
+        self._notify_listeners(EventType.START)
+
     def stop(self):
         """Gracefully stop the WebSocket connection."""
         self.stop_event.set()
@@ -227,10 +385,18 @@ class ETPSimpleClient:
             self.thread.join()
             self.thread = None
 
+        self._notify_listeners(EventType.STOP)
+
     def close(self):
-        """Close the WebSocket connection."""
+        """Close the WebSocket connection.
+
+        This method sends a CloseSession message, stops the client, and notifies
+        CLOSE event listeners.
+        """
         self.send(CloseSession(reason="I want to stop"), timeout=2)
         self.stop()
+
+        self._notify_listeners(EventType.CLOSE)
 
     def on_message(self, ws, message):
         """Handles incoming WebSocket messages."""
@@ -281,6 +447,8 @@ class ETPSimpleClient:
                     )
                     event.set()
         asyncio.run(handle_msg(self.spec, self, message))
+
+        self._notify_listeners(EventType.ON_MESSAGE, ws=ws, message=message, received=recieved)
 
     def send_and_wait(self, req, timeout: int = 5) -> List[Message]:
         """
