@@ -408,7 +408,7 @@ class ETPClient(ETPSimpleClient):
             f"Creating dataspaces: {dataspace_names} with custom data: %s",
             json.dumps(
                 {
-                    "viewers ": acl_viewers,
+                    "viewers": acl_viewers,
                     "owners": acl_owners,
                     "legaltags": legal_tags,
                     "otherRelevantDataCountries": other_relevant_data_countries,
@@ -418,7 +418,7 @@ class ETPClient(ETPSimpleClient):
         return self.put_dataspace(
             dataspace_names=dataspace_names,
             custom_data={
-                "viewers ": acl_viewers,
+                "viewers": acl_viewers,
                 "owners": acl_owners,
                 "legaltags": legal_tags,
                 "otherRelevantDataCountries": other_relevant_data_countries,
@@ -975,7 +975,7 @@ class ETPClient(ETPSimpleClient):
                 dataArrays={
                     "0": PutDataArraysType(
                         uid=DataArrayIdentifier(uri=str(uri), pathInResource=path_in_resource),
-                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),  # type: ignore
+                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),
                     )
                 }
             ),

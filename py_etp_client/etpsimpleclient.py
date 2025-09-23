@@ -23,10 +23,17 @@ Example:
     from py_etp_client.etpsimpleclient import ETPSimpleClient, EventType
 
     def handle_events(event_type: EventType, **kwargs):
-        print(f"Event: {event_type.value}")
+        if event_type == EventType.ON_OPEN:
+            print(f"Connected! WebSocket: {kwargs.get('ws')}")
+        elif event_type == EventType.ON_ERROR:
+            print(f"Error: {kwargs.get('error')}")
+        elif event_type == EventType.ON_MESSAGE:
+            print(f"Message: {len(kwargs.get('message', b''))} bytes")
 
     client = ETPSimpleClient(url="wss://example.com", spec=None)
     client.add_listener(EventType.ON_OPEN, handle_events)
+    client.add_listener(EventType.ON_ERROR, handle_events)
+    client.add_listener(EventType.ON_MESSAGE, handle_events)
     client.start()
     ```
 """
@@ -78,14 +85,23 @@ class EventType(Enum):
     Each event type corresponds to a specific operation or state change in the ETP client.
     Listeners registered for these events will be called with relevant context data.
 
-    Event Types and their context data (**kwargs):
-    - ON_OPEN: WebSocket connection established (ws)
-    - ON_CLOSE: WebSocket connection closed (ws, close_status_code, close_msg)
-    - ON_ERROR: Error occurred (ws, error)
-    - ON_MESSAGE: Message received (ws, message, received)
-    - START: Client starting (no additional args)
-    - STOP: Client stopping (no additional args)
-    - CLOSE: Client closing (no additional args)
+    Event Types and their **kwargs parameters:
+    - ON_OPEN: WebSocket connection established
+      * ws: The WebSocket object
+    - ON_CLOSE: WebSocket connection closed
+      * ws: The WebSocket object
+      * close_status_code: The close status code
+      * close_msg: The close message
+    - ON_ERROR: Error occurred
+      * ws: The WebSocket object
+      * error: The error that occurred
+    - ON_MESSAGE: Message received
+      * ws: The WebSocket object
+      * message: The raw message bytes received
+      * received: The decoded Message object
+    - START: Client starting (no additional parameters)
+    - STOP: Client stopping (no additional parameters)
+    - CLOSE: Client closing (no additional parameters)
     """
 
     ON_OPEN = "on_open"
@@ -134,19 +150,37 @@ class ETPSimpleClient:
         Listener Functions:
         - Must accept (event_type: EventType, **kwargs) as parameters
         - event_type: The EventType enum value indicating which event occurred
-        - **kwargs: Event-specific data (e.g., ws, error, message, close_status_code, etc.)
+        - **kwargs: Event-specific data, see details below:
+
+        Event-specific kwargs:
+        - ON_OPEN: ws (WebSocket object)
+        - ON_CLOSE: ws (WebSocket object), close_status_code (int), close_msg (str)
+        - ON_ERROR: ws (WebSocket object), error (exception/error object)
+        - ON_MESSAGE: ws (WebSocket object), message (raw bytes), received (decoded Message)
+        - START: No additional parameters
+        - STOP: No additional parameters
+        - CLOSE: No additional parameters
 
         Example Usage:
         ```python
         def my_listener(event_type: EventType, **kwargs):
             if event_type == EventType.ON_ERROR:
                 print(f"Error occurred: {kwargs.get('error')}")
+                print(f"WebSocket: {kwargs.get('ws')}")
             elif event_type == EventType.ON_MESSAGE:
-                print(f"Message received: {kwargs.get('message')}")
+                print(f"Message received: {len(kwargs.get('message', b''))} bytes")
+                print(f"Decoded message: {kwargs.get('received')}")
+            elif event_type == EventType.ON_CLOSE:
+                print(f"Connection closed with code: {kwargs.get('close_status_code')}")
+                print(f"Close message: {kwargs.get('close_msg')}")
+            elif event_type == EventType.ON_OPEN:
+                print(f"Connection opened: {kwargs.get('ws')}")
 
         client = ETPSimpleClient(url="wss://example.com", spec=None)
         client.add_listener(EventType.ON_ERROR, my_listener)
         client.add_listener(EventType.ON_MESSAGE, my_listener)
+        client.add_listener(EventType.ON_CLOSE, my_listener)
+        client.add_listener(EventType.ON_OPEN, my_listener)
         ```
 
         Listener Management:
