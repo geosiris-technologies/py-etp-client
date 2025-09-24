@@ -1049,13 +1049,6 @@ class ETPClient(ETPSimpleClient):
 
         dataspaceUris = reshape_uris_as_str_list(dataspace)
 
-        for i, ds in enumerate(dataspaceUris):
-            if not ds.startswith("eml:///"):
-                if ds is not None:
-                    dataspaceUris[i] = f"eml:///dataspace('{ds}')"
-                else:
-                    dataspaceUris[i] = "eml:///"
-
         if self.active_transaction is not None:
             logging.warning("A transaction is already active, please commit it before starting a new one")
             return self.active_transaction
