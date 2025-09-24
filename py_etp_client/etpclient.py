@@ -65,7 +65,6 @@ from py_etp_client.requests import (
     get_resources,
     get_supported_types,
     put_dataspace,
-    delete_dataspace,
 )
 from py_etp_client.utils import (
     get_valid_uri_str,
@@ -88,6 +87,7 @@ from py_etp_client import (
     Dataspace,
     DeleteDataObjects,
     DeleteDataObjectsResponse,
+    DeleteDataspaces,
     DeleteDataspacesResponse,
     GetDataArrayMetadata,
     GetDataArrayMetadataResponse,
@@ -323,7 +323,7 @@ class ETPClient(ETPSimpleClient):
             dataspace_names (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
-        dataspace_names = reshape_uris_as_str_list(dataspace_names)
+        # dataspace_names = reshape_uris_as_str_list(dataspace_names)
         logging.warning("In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags")
         pdm_msg_list = self.send_and_wait(
             put_dataspace(dataspace_names=dataspace_names, custom_data=custom_data), timeout=timeout
@@ -364,7 +364,7 @@ class ETPClient(ETPSimpleClient):
         Returns:
             Union[Dict[str, Any], ProtocolException]:
         """
-        dataspace_names = reshape_uris_as_str_list(dataspace_names)
+        dataspace_names = reshape_uris_as_str_dict(dataspace_names)
 
         # Checking ACLs
         if isinstance(acl_owners, str):
@@ -440,9 +440,9 @@ class ETPClient(ETPSimpleClient):
             dataspace_names (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
-        dataspace_names = reshape_uris_as_str_list(dataspace_names)
+        dataspace_names = reshape_uris_as_str_dict(dataspace_names)
 
-        ddm_msg_list = self.send_and_wait(delete_dataspace(dataspace_names), timeout=timeout)
+        ddm_msg_list = self.send_and_wait(DeleteDataspaces(uris=dataspace_names), timeout=timeout)
         res = {}
         for ddm in ddm_msg_list:
             if isinstance(ddm.body, DeleteDataspacesResponse):

@@ -198,11 +198,7 @@ def get_resources(
     data_object_types: Optional[List[str]] = None,
     include_edges: bool = False,
 ):
-    if uri is not None:
-        if not uri.startswith("eml:///"):
-            uri = f"eml:///dataspace('{uri}')"
-    else:
-        uri = "eml:///"
+    uri = get_valid_uri_str(uri)
     return GetResources(
         context=ContextInfo(
             uri=uri,
@@ -267,12 +263,13 @@ def put_dataspace(dataspace_names: T_UriSingleOrGrouped, custom_data: Optional[d
             else:
                 custom_data_reshaped[key] = DataValue(item=value)
 
-    for ds_name in dataspace_names:
-        ds_map[str(len(ds_map))] = Dataspace(
-            uri=("eml:///dataspace('" + ds_name + "')" if "eml:///" not in ds_name else ds_name),
+    for k, ds_uri in dataspace_names.items():
+        ds_uri_etp = parse_uri(ds_uri)
+        ds_map[k] = Dataspace(
+            uri=ds_uri,
             storeLastWrite=now,
             storeCreated=now,
-            path=ds_name,
+            path=ds_uri_etp.dataspace or "",
             customData=custom_data_reshaped or {},
         )
 
@@ -281,13 +278,6 @@ def put_dataspace(dataspace_names: T_UriSingleOrGrouped, custom_data: Optional[d
     print(PutDataspaces(dataspaces=ds_map).json())
 
     return PutDataspaces(dataspaces=ds_map)
-
-
-def delete_dataspace(dataspace_names: list):
-    ds_map = {}
-    for ds_name in dataspace_names:
-        ds_map[str(len(ds_map))] = "eml:///dataspace('" + ds_name + "')" if "eml:///" not in ds_name else ds_name
-    return DeleteDataspaces(uris=ds_map)
 
 
 #    _____ __
@@ -305,9 +295,7 @@ def delete_data_object(uris: T_UriSingleOrGrouped):
 
 
 def _create_resource(obj: Any, dataspace_name: Optional[str] = None) -> Resource:
-    ds_name = dataspace_name
-    if ds_name is not None and "eml:///" in ds_name:
-        ds_name = parse_uri(ds_name).dataspace
+    ds_name = parse_uri(get_valid_uri_str(dataspace_name)).dataspace if dataspace_name is not None else None
 
     uri = str(get_obj_uri(obj, ds_name))
 
@@ -471,8 +459,7 @@ def get_supported_types(
     return_empty_types: bool = True,
     scope: str = "self",
 ):
-    if not uri.startswith("eml:///"):
-        uri = f"eml:///dataspace('{uri}')"
+    uri = get_valid_uri_str(uri)
     if isinstance(count, str):
         count = count.lower() == "true"
     if isinstance(return_empty_types, str):
