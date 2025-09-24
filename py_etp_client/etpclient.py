@@ -59,7 +59,7 @@ from etpproto.connection import ETPConnection, ConnectionType
 
 
 from py_etp_client.requests import (
-    _create_data_object,
+    create_data_object,
     get_any_array,
     get_dataspaces,
     get_resources,
@@ -67,6 +67,13 @@ from py_etp_client.requests import (
     put_dataspace,
     delete_dataspace,
 )
+from py_etp_client.utils import (
+    get_valid_uri_str,
+    reshape_uris_as_str_list,
+    reshape_uris_as_str_dict,
+    T_UriSingleOrGrouped,
+)
+
 from py_etp_client import (
     Uuid,
     Authorize,
@@ -190,7 +197,7 @@ class ETPClient(ETPSimpleClient):
         access_token: Optional[str] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
-        headers: Optional[dict] = None,
+        headers: Optional[Union[dict, str]] = None,
         verify: Optional[Any] = None,
         req_session: Optional[RequestSession] = None,
     ):
@@ -207,7 +214,7 @@ class ETPClient(ETPSimpleClient):
             access_token: Access token for authentication (optional)
             username: Username for basic authentication (optional, ignored if access_token provided)
             password: Password for basic authentication (optional, ignored if access_token provided)
-            headers: Additional headers for WebSocket request (optional)
+            headers: Additional headers for WebSocket request (optional), parsed as JSON if string
             verify: SSL verification options (optional)
             req_session: RequestSession object to use (optional, default created if None)
 
@@ -304,7 +311,7 @@ class ETPClient(ETPSimpleClient):
         return datasapaces
 
     def put_dataspace(
-        self, dataspace_names: List[str], custom_data=None, timeout: int = 5
+        self, dataspace_names: T_UriSingleOrGrouped, custom_data=None, timeout: int = 5
     ) -> Union[Dict[str, Any], ProtocolException]:
         """
         @deprecated: Use put_dataspaces_with_acl instead.
@@ -313,11 +320,10 @@ class ETPClient(ETPSimpleClient):
         /!\\ In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags
 
         Args:
-            dataspace_names (List[str]): List of dataspace names
+            dataspace_names (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
-        if isinstance(dataspace_names, str):
-            dataspace_names = [dataspace_names]
+        dataspace_names = reshape_uris_as_str_list(dataspace_names)
         logging.warning("In the future, for OSDU RDDMS, custom data will HAVE to contains acl and legalTags")
         pdm_msg_list = self.send_and_wait(
             put_dataspace(dataspace_names=dataspace_names, custom_data=custom_data), timeout=timeout
@@ -334,7 +340,7 @@ class ETPClient(ETPSimpleClient):
 
     def put_dataspaces_with_acl(
         self,
-        dataspace_names: Union[str, List[str]],
+        dataspace_names: T_UriSingleOrGrouped,
         acl_owners: Union[str, List[str]],
         acl_viewers: Union[str, List[str]],
         legal_tags: Union[str, List[str]],
@@ -348,7 +354,7 @@ class ETPClient(ETPSimpleClient):
         and https://community.opengroup.org/osdu/platform/domain-data-mgmt-services/reservoir/open-etp-server/-/blob/main/docs/bestPracticesForClients.md?ref_type=heads
 
         Args:
-            dataspace_names (List[str]): List of dataspace names
+            dataspace_names (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): List of dataspace names
             acl_owners (Union[str, List[str]]): a list of owners or a json representation of a list of owners
             acl_viewers (Union[str, List[str]]): a list of viewers or a json representation of a list of viewers
             legal_tags (Union[str, List[str]]): a list of legal tags or a json representation of a list of legal tags
@@ -358,8 +364,7 @@ class ETPClient(ETPSimpleClient):
         Returns:
             Union[Dict[str, Any], ProtocolException]:
         """
-        if isinstance(dataspace_names, str):
-            dataspace_names = [dataspace_names]
+        dataspace_names = reshape_uris_as_str_list(dataspace_names)
 
         # Checking ACLs
         if isinstance(acl_owners, str):
@@ -427,16 +432,16 @@ class ETPClient(ETPSimpleClient):
         )
 
     def delete_dataspace(
-        self, dataspace_names: List[str], timeout: int = 5
+        self, dataspace_names: T_UriSingleOrGrouped, timeout: int = 5
     ) -> Union[Dict[str, Any], ProtocolException]:
         """Delete dataspaces.
 
         Args:
-            dataspace_names (List[str]): List of dataspace names
+            dataspace_names (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): List of dataspace names
             timeout (Optional[int], optional): Defaults to 5.
         """
-        if isinstance(dataspace_names, str):
-            dataspace_names = [dataspace_names]
+        dataspace_names = reshape_uris_as_str_list(dataspace_names)
+
         ddm_msg_list = self.send_and_wait(delete_dataspace(dataspace_names), timeout=timeout)
         res = {}
         for ddm in ddm_msg_list:
@@ -457,7 +462,7 @@ class ETPClient(ETPSimpleClient):
 
     def get_resources(
         self,
-        uri: Optional[str],
+        uri: Optional[Union[str, ETPUri]] = None,
         depth: int = 1,
         scope: str = "self",
         types_filter: Optional[List[str]] = None,
@@ -467,7 +472,7 @@ class ETPClient(ETPSimpleClient):
         """Get resources from the server.
 
         Args:
-            uris (str): Uri of the object
+            uris (Union[str, ETPUri]): Uri of the object
             depth (int): Depth of the search
             scope (str): "self"|"targets"|"sources"|"sources_or_self"|"targets_or_self". Default is "self"
             types_filter (List[str]): Types of the objects
@@ -477,7 +482,8 @@ class ETPClient(ETPSimpleClient):
             List[Resource]: List of resources
         """
         gr_msg_list = self.send_and_wait(
-            get_resources(uri, depth, scope, types_filter, include_edges=include_edges), timeout=timeout
+            get_resources(get_valid_uri_str(uri), depth, scope, types_filter, include_edges=include_edges),
+            timeout=timeout,
         )
 
         resources = []
@@ -491,24 +497,19 @@ class ETPClient(ETPSimpleClient):
         return resources
 
     def get_all_related_objects_uris(
-        self, uri: Union[str, List[str]], scope: str = "target", timeout: int = 5
+        self, uri: T_UriSingleOrGrouped, scope: str = "target", timeout: int = 5
     ) -> List[str]:
         """Get all related objects uris from the server.
 
         Args:
-            uri (str): Uri of the object
+            uri (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): Uri of the object
             timeout (int, optional): Defaults to 5.
 
         Returns:
             List[str]: List of uris
         """
         allready_checked = []
-        to_check: List[str] = []
-        if isinstance(uri, str):
-            to_check.append(uri)
-        elif isinstance(uri, list):
-            for u in uri:
-                to_check.append(u)
+        to_check: List[str] = reshape_uris_as_str_list(uri)
 
         while len(to_check) > 0:
             uri = to_check.pop(0)
@@ -528,18 +529,18 @@ class ETPClient(ETPSimpleClient):
 
         return allready_checked
 
-    def search_resource(self, dataspace: str, uuid: str, timeout: int = 5) -> List[str]:
+    def search_resource(self, dataspace: Union[str, ETPUri], uuid: str, timeout: int = 5) -> List[str]:
         """Search for a resource in the server.
 
         Args:
-            dataspace (str): Dataspace name
+            dataspace (Union[str, ETPUri]): Dataspace name
             uuid (str): UUID of the object
             timeout (int, optional): Defaults to 5.
 
         Returns:
             List[str]: List of uris
         """
-        resources = self.get_resources(uri=dataspace, timeout=timeout)
+        resources = self.get_resources(uri=get_valid_uri_str(dataspace), timeout=timeout)
         uris = []
         for r in resources:
             if isinstance(r, Resource) and uuid in r.uri:
@@ -560,12 +561,12 @@ class ETPClient(ETPSimpleClient):
     # /____/\__/\____/_/   \___/
 
     def get_data_object(
-        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: int = 5
+        self, uris: T_UriSingleOrGrouped, format_: str = "xml", timeout: int = 5
     ) -> Optional[Union[Dict[str, str], List[str], str, ProtocolException]]:
         """Get data object from the server.
 
         Args:
-            uris (Union[str, Dict, List]): Uri(s) of the objects
+            uris (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]]): Uri(s) of the objects
             format (str, optional): "xml" | "json". Defaults to "xml".
             timeout (Optional[int], optional): Defaults to 5.
 
@@ -575,22 +576,7 @@ class ETPClient(ETPSimpleClient):
         Returns:
             Union[Dict[str, str], List[str], str]: Returns a dict of uris and data if uris is a dict, a list of data if uris is a list, or a single data if uris is a string
         """
-        uris_dict = {}
-        if isinstance(uris, str):
-            uris_dict["0"] = uris
-        elif isinstance(uris, dict):
-            uris_dict = uris
-        elif isinstance(uris, list):
-            for i, u in enumerate(uris):
-                uris_dict[str(i)] = u
-        elif isinstance(uris, ETPUri):
-            uris_dict["0"] = str(uris)
-        else:
-            raise ValueError("uri must be a string, a dict or a list of strings")
-
-        for ui in uris_dict.keys():
-            # remove starting and trailing spaces
-            uris_dict[ui] = uris_dict[ui].strip()
+        uris_dict = reshape_uris_as_str_dict(uris)
 
         gdor_msg_list = self.send_and_wait(GetDataObjects(uris=uris_dict, format=format_), timeout=timeout)
         data_obj = {}
@@ -614,8 +600,19 @@ class ETPClient(ETPSimpleClient):
         return res
 
     def get_data_object_as_obj(
-        self, uris: Union[str, Dict, List], format_: str = "xml", timeout: int = 5
+        self, uris: T_UriSingleOrGrouped, format_: str = "xml", timeout: int = 5
     ) -> Union[Dict[str, Any], List[Any], Any, ProtocolException]:
+        """Get data object as a deserialized object.
+
+        Args:
+            uris (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): The URIs of the data objects to retrieve.
+            format_ (str, optional): The format of the data objects. Defaults to "xml".
+            timeout (int, optional): The timeout for the request. Defaults to 5.
+
+        Returns:
+            Union[Dict[str, Any], List[Any], Any, ProtocolException]: The deserialized data objects or an error.
+        """
+
         # TODO : test if energyml.resqml or energyml.witsml exists in the dependencies
         objs = self.get_data_object(
             uris=uris,
@@ -636,25 +633,31 @@ class ETPClient(ETPSimpleClient):
         return objs
 
     def put_data_object_str(
-        self, obj_content: Union[str, List], dataspace_name: str, format: str = "xml", timeout: int = 5
+        self,
+        obj_content: Union[str, List[str]],
+        dataspace_name: Optional[Union[str, ETPUri]] = None,
+        format: str = "xml",
+        timeout: int = 5,
     ) -> Dict[str, Any]:
         """Put data object to the server.
 
         Args:
-            obj_content (str): An xml or json representation of an energyml object.
-            dataspace_name (str): Dataspace name
+            obj_content (Union[str, List[str]]): An xml or json representation of an energyml object.
+            dataspace_name (Union[str, ETPUri]): Dataspace name
             timeout (int, optional): Defaults to 5.
         """
-        if not isinstance(obj_content, list):
+        if isinstance(obj_content, dict):
+            obj_content = list(obj_content.values())  # type: ignore
+        elif not isinstance(obj_content, list):
             obj_content = [obj_content]
 
         do_dict = {}
         for o in obj_content:
-            do_dict[str(len(do_dict))] = _create_data_object(
-                obj_as_str=o, dataspace_name=dataspace_name, format=format
+            do_dict[str(len(do_dict))] = create_data_object(
+                obj_as_str=o, dataspace_name=get_valid_uri_str(dataspace_name), format=format
             )
 
-        # do_dict = {"0": _create_data_object(obj_as_str=obj_content, dataspace_name=dataspace_name)}
+        # do_dict = {"0": create_data_object(obj_as_str=obj_content, dataspace_name=dataspace_name)}
 
         pdor_msg_list = self.send_and_wait(PutDataObjects(dataObjects=do_dict), timeout=timeout)
 
@@ -676,12 +679,14 @@ class ETPClient(ETPSimpleClient):
             dataspace_name (str): Dataspace name
             timeout (int, optional): Defaults to 5.
         """
-        if not isinstance(obj, list):
+        if isinstance(obj, dict):
+            obj = list(obj.values())  # type: ignore
+        elif not isinstance(obj, list):
             obj = [obj]
 
         do_dict = {}
         for o in obj:
-            do_dict[str(len(do_dict))] = _create_data_object(obj=o, dataspace_name=dataspace_name, format=format_)
+            do_dict[str(len(do_dict))] = create_data_object(obj=o, dataspace_name=dataspace_name, format=format_)
 
         pdor_msg_list = self.send_and_wait(PutDataObjects(dataObjects=do_dict), timeout=timeout)
 
@@ -693,49 +698,17 @@ class ETPClient(ETPSimpleClient):
                 logging.error("Error: %s", pdor.body)
         return res
 
-    def delete_data_object(self, uris: Union[str, Dict, List], timeout: int = 5) -> Dict[str, Any]:
-        """Delete data object from the server.
-
-        Args:
-            uris (Union[str, Dict, List]): Uri(s) of the objects
-            timeout (Optional[int], optional): Defaults to 5.
-
-        Raises:
-            ValueError: if uris is not a string, a dict or a list of strings
-
-        Returns:
-            Dict[str, Any]: A map of uri and a boolean indicating if the object has been successfully deleted
-        """
-        uris_dict = {}
-        if isinstance(uris, str):
-            uris_dict["0"] = uris
-        elif isinstance(uris, dict):
-            uris_dict = uris
-        elif isinstance(uris, list):
-            for i, u in enumerate(uris):
-                uris_dict[str(i)] = u
-        else:
-            raise ValueError("uri must be a string, a dict or a list of strings")
-
-        gdor_msg_list = self.send_and_wait(DeleteDataObjects(uris=uris_dict), timeout=timeout)
-        res = {}
-        for gdor in gdor_msg_list:
-            if isinstance(gdor.body, DeleteDataObjectsResponse):
-                res.update(gdor.body.deleted_uris)
-            else:
-                logging.error("Error: %s", gdor.body)
-        return res
-
     def put_data_object_file(
-        self, file_path: Union[List[str], str], dataspace_name: Optional[str] = None, timeout: int = 5
+        self, file_path: Union[List[str], str], dataspace_name: Optional[Union[str, ETPUri]] = None, timeout: int = 5
     ):
         """Put data object to the server.
 
         Args:
             file_path (Union[List[str], str]): Path to the file(s) to be uploaded
-            dataspace_name (str): Dataspace name
+            dataspace_name (Union[str, ETPUri]): Dataspace name
             timeout (int, optional): Defaults to 5.
         """
+        dataspace_name = get_valid_uri_str(dataspace_name)
         if isinstance(file_path, str):
             file_path = [file_path]
 
@@ -757,9 +730,9 @@ class ETPClient(ETPSimpleClient):
             if flw.endswith(".xml") or flw.endswith(".json"):
                 with open(f, "r") as file:
                     file_content = file.read()
-                    do_dict[len(do_dict)] = _create_data_object(
+                    do_dict[len(do_dict)] = create_data_object(
                         obj_as_str=file_content,
-                        dataspace_name=dataspace_name,
+                        dataspace_name=get_valid_uri_str(dataspace_name),
                         format="xml" if flw.endswith(".xml") else "json",
                     )
             elif flw.endswith(".epc"):
@@ -767,7 +740,7 @@ class ETPClient(ETPSimpleClient):
                 if epc is not None:
                     for obj in epc.energyml_objects:
                         if obj is not None:
-                            do_dict[len(do_dict)] = _create_data_object(obj=obj, dataspace_name=dataspace_name)
+                            do_dict[len(do_dict)] = create_data_object(obj=obj, dataspace_name=dataspace_name)
                 else:
                     logging.error("Error: Cannot read EPC file %s", f)
                     continue
@@ -786,6 +759,30 @@ class ETPClient(ETPSimpleClient):
                 logging.error("Error: %s", pdor.body)
         return res
 
+    def delete_data_object(self, uris: T_UriSingleOrGrouped, timeout: int = 5) -> Dict[str, Any]:
+        """Delete data object from the server.
+
+        Args:
+            uris (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]): Uri(s) of the objects
+            timeout (Optional[int], optional): Defaults to 5.
+
+        Raises:
+            ValueError: if uris is not a string, a dict or a list of strings
+
+        Returns:
+            Dict[str, Any]: A map of uri and a boolean indicating if the object has been successfully deleted
+        """
+        uris_dict = reshape_uris_as_str_dict(uris)
+
+        gdor_msg_list = self.send_and_wait(DeleteDataObjects(uris=uris_dict), timeout=timeout)
+        res = {}
+        for gdor in gdor_msg_list:
+            if isinstance(gdor.body, DeleteDataObjectsResponse):
+                res.update(gdor.body.deleted_uris)
+            else:
+                logging.error("Error: %s", gdor.body)
+        return res
+
     #     ____        __        ___
     #    / __ \____ _/ /_____ _/   |  ______________ ___  __
     #   / / / / __ `/ __/ __ `/ /| | / ___/ ___/ __ `/ / / /
@@ -793,17 +790,18 @@ class ETPClient(ETPSimpleClient):
     # /_____/\__,_/\__/\__,_/_/  |_/_/  /_/   \__,_/\__, /
     #                                              /____/
 
-    def get_data_array(self, uri: str, path_in_resource: str, timeout: int = 5) -> Optional[np.ndarray]:
+    def get_data_array(self, uri: Union[str, ETPUri], path_in_resource: str, timeout: int = 5) -> Optional[np.ndarray]:
         """Get an array from the server.
 
         Args:
-            uri (str): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
             path_in_resource (str): path to the array. Must be the same than in the original object
             timeout (int, optional): Defaults to 5.
 
         Returns:
             np.ndarray: the array, reshaped in the correct dimension
         """
+        uri = get_valid_uri_str(uri)
         gdar_msg_list = self.send_and_wait(
             GetDataArrays(dataArrays={"0": DataArrayIdentifier(uri=uri, pathInResource=path_in_resource)}),
             timeout=timeout,
@@ -813,15 +811,15 @@ class ETPClient(ETPSimpleClient):
             if isinstance(gdar.body, GetDataArraysResponse) and "0" in gdar.body.data_arrays:
                 # print(gdar)
                 if array is None:
-                    array = np.array(gdar.body.data_arrays["0"].data.item.values).reshape(
-                        tuple(gdar.body.data_arrays["0"].dimensions)
+                    array = np.array(gdar.body.data_arrays["0"].data.item.values).reshape(  # type: ignore
+                        tuple(gdar.body.data_arrays["0"].dimensions)  # type: ignore
                     )
                 else:
                     array = np.concatenate(
                         (
                             array,
-                            np.array(gdar.body.data_arrays["0"].data.item.values).reshape(
-                                tuple(gdar.body.data_arrays["0"].dimensions)
+                            np.array(gdar.body.data_arrays["0"].data.item.values).reshape(  # type: ignore
+                                tuple(gdar.body.data_arrays["0"].dimensions)  # type: ignore
                             ),
                         )
                     )
@@ -830,25 +828,25 @@ class ETPClient(ETPSimpleClient):
         return array
 
     def get_data_subarray(
-        self, uri: str, path_in_resource: str, start: List[int], count: List[int], timeout: int = 5
-    ) -> np.ndarray:
+        self, uri: Union[str, ETPUri], path_in_resource: str, start: List[int], count: List[int], timeout: int = 5
+    ) -> Optional[np.ndarray]:
         """Get a sub part of an array from the server.
 
         Args:
-            uri (str): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
             path_in_resource (str): path to the array. Must be the same than in the original object
             start (List[int]): start indices in each dimensions.
             count (List[int]): Count of element in each dimensions.
             timeout (int, optional): Defaults to 5.
 
         Returns:
-            np.ndarray: the array, NOT reshaped in the correct dimension. The result is a flat array !
+            Optional[np.ndarray]: the array, NOT reshaped in the correct dimension. The result is a flat array !
         """
         gdar_msg_list = self.send_and_wait(
             GetDataSubarrays(
                 dataSubarrays={
                     "0": GetDataSubarraysType(
-                        uid=DataArrayIdentifier(uri=uri, pathInResource=path_in_resource),
+                        uid=DataArrayIdentifier(uri=get_valid_uri_str(uri), pathInResource=path_in_resource),
                         starts=start,  # type: ignore
                         counts=count,  # type: ignore
                     )
@@ -861,22 +859,22 @@ class ETPClient(ETPSimpleClient):
             if isinstance(gdar.body, GetDataSubarraysResponse) and "0" in gdar.body.data_subarrays:
                 # print(gdar)
                 if array is None:
-                    array = np.array(gdar.body.data_subarrays["0"].data.item.values)
+                    array = np.array(gdar.body.data_subarrays["0"].data.item.values)  # type: ignore
                 else:
                     array = np.concatenate(
-                        (array, np.array(gdar.body.data_subarrays["0"].data.item.values)),
+                        (array, np.array(gdar.body.data_subarrays["0"].data.item.values)),  # type: ignore
                     )
             else:
                 logging.error("Error: %s", gdar.body)
         return array
 
     def get_data_array_metadata(
-        self, uri: str, path_in_resource: str, timeout: int = 5
+        self, uri: Union[str, ETPUri], path_in_resource: str, timeout: int = 5
     ) -> Dict[str, DataArrayMetadata]:
         """Get metadata of an array from the server.
 
         Args:
-            uri (str): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
             path_in_resource (str): path to the array. Must be the same than in the original object
             timeout (int, optional): Defaults to 5.
 
@@ -884,7 +882,9 @@ class ETPClient(ETPSimpleClient):
             Dict[str, Any]: metadata of the array
         """
         gdar_msg_list = self.send_and_wait(
-            GetDataArrayMetadata(dataArrays={"0": DataArrayIdentifier(uri=uri, pathInResource=path_in_resource)}),
+            GetDataArrayMetadata(
+                dataArrays={"0": DataArrayIdentifier(uri=get_valid_uri_str(uri), pathInResource=path_in_resource)}
+            ),
             timeout=timeout,
         )
         metadata = {}
@@ -897,7 +897,7 @@ class ETPClient(ETPSimpleClient):
 
     def put_uninitialized_data_array(
         self,
-        uri: str,
+        uri: Union[str, ETPUri],
         path_in_resource: str,
         dimensions: List[int],
         data_type: Union[str, AnyArrayType] = "float64",
@@ -909,7 +909,7 @@ class ETPClient(ETPSimpleClient):
         """Put an uninitialized data array to the server.
 
         Args:
-            uri (str): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
             path_in_resource (str): path to the array. Must be the same than in the original object
             dimensions (List[int]): dimensions of the array (as list of int)
             data_type (str, optional): Data type of the array. Defaults to "float64".
@@ -918,11 +918,12 @@ class ETPClient(ETPSimpleClient):
         Returns:
             bool: True if the array has been successfully put
         """
+        uri = get_valid_uri_str(uri)
         pdar_msg_list = self.send_and_wait(
             PutUninitializedDataArrays(
                 dataArrays={
                     "0": PutUninitializedDataArrayType(
-                        uid=DataArrayIdentifier(uri=str(uri), pathInResource=path_in_resource),
+                        uid=DataArrayIdentifier(uri=uri, pathInResource=path_in_resource),
                         metadata=DataArrayMetadata(
                             dimensions=dimensions,  # type: ignore
                             transportArrayType=(
@@ -942,23 +943,23 @@ class ETPClient(ETPSimpleClient):
 
         for pdar in pdar_msg_list:
             if isinstance(pdar.body, PutUninitializedDataArraysResponse):
-                return pdar.body.success.get(str(uri), False)
+                return pdar.body.success.get(uri, None) is not None
             else:
                 logging.error("Error: %s", pdar.body)
         return False
 
     def put_data_array(
         self,
-        uri: str,
+        uri: Union[str, ETPUri],
         path_in_resource: str,
         array_flat: Union[np.ndarray, list],
-        dimensions: List[int],
+        dimensions: Union[List[int], Tuple[int, ...]],
         timeout: int = 5,
     ) -> Dict[str, bool]:
         """Put a data array to the server.
 
         Args:
-            uri (str): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
             path_in_resource (str): path to the array. Must be the same than in the original object
             array_flat (Union[np.array, list]): a flat array
             dimensions (List[int]): dimensions of the array (as list of int)
@@ -974,8 +975,8 @@ class ETPClient(ETPSimpleClient):
             PutDataArrays(
                 dataArrays={
                     "0": PutDataArraysType(
-                        uid=DataArrayIdentifier(uri=str(uri), pathInResource=path_in_resource),
-                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),
+                        uid=DataArrayIdentifier(uri=get_valid_uri_str(uri), pathInResource=path_in_resource),
+                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),  # type: ignore
                     )
                 }
             ),
@@ -998,11 +999,13 @@ class ETPClient(ETPSimpleClient):
     # /____/\__,_/ .___/ .___/\____/_/   \__/\___/\__,_/    /_/  \__, / .___/\___/____/
     #           /_/   /_/                                       /____/_/
 
-    def get_supported_types(self, uri: str, count: bool = True, return_empty_types: bool = True, scope: str = "self"):
+    def get_supported_types(
+        self, uri: Union[str, ETPUri], count: bool = True, return_empty_types: bool = True, scope: str = "self"
+    ):
         """Get supported types.
 
         Args:
-            uri (str): uri
+            uri (Union[str, ETPUri]): uri
             count (bool, optional): Defaults to True.
             return_empty_types (bool, optional): Defaults to True.
             scope (str, optional): Defaults to "self".
@@ -1011,7 +1014,9 @@ class ETPClient(ETPSimpleClient):
             [type]: [description]
         """
         gdar_msg_list = self.send_and_wait(
-            get_supported_types(uri=uri, count=count, return_empty_types=return_empty_types, scope=scope)
+            get_supported_types(
+                uri=get_valid_uri_str(uri), count=count, return_empty_types=return_empty_types, scope=scope
+            )
         )
 
         supported_types = []
@@ -1029,12 +1034,12 @@ class ETPClient(ETPSimpleClient):
     # /_/ /_/   \__,_/_/ /_/____/\__,_/\___/\__/_/\____/_/ /_/
 
     def start_transaction(
-        self, dataspace: Union[str, List[str]], readonly: bool = False, msg: str = "", timeout: int = 5
+        self, dataspace: T_UriSingleOrGrouped, readonly: bool = False, msg: str = "", timeout: int = 5
     ) -> Optional[Uuid]:
         """Start a transaction.
 
         Args:
-            dataspace (Union[str; List[str]]): Dataspace name or list of dataspace names
+            dataspace (Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]]): Dataspace name or list of dataspace names
             or list of dataspace uris. If a list is provided, the transaction will be started on all the dataspaces.
             timeout (int, optional): Defaults to 5.
 
@@ -1042,7 +1047,7 @@ class ETPClient(ETPSimpleClient):
             int: transaction id
         """
 
-        dataspaceUris = [dataspace] if isinstance(dataspace, str) else dataspace
+        dataspaceUris = reshape_uris_as_str_list(dataspace)
 
         for i, ds in enumerate(dataspaceUris):
             if not ds.startswith("eml:///"):
@@ -1057,7 +1062,7 @@ class ETPClient(ETPSimpleClient):
         else:
             str_msg_list = self.send_and_wait(
                 StartTransaction(
-                    dataspaceUris=dataspaceUris,
+                    dataspaceUris=dataspaceUris,  # type: ignore
                     message=msg,
                     readOnly=readonly,
                 ),

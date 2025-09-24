@@ -45,7 +45,7 @@ import json
 import os
 import ssl
 import threading
-from typing import Optional, Any, List, Callable, Dict
+from typing import Optional, Any, List, Callable, Dict, Union
 import websocket
 import time
 import logging
@@ -122,7 +122,7 @@ class ETPSimpleClient:
         access_token: Optional[str] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
-        headers: Optional[dict] = None,
+        headers: Optional[Union[dict, str]] = None,
         verify: Optional[Any] = None,
         max_reconnect_attempts: int = 5,
         req_session: Optional[RequestSession] = None,
@@ -195,7 +195,7 @@ class ETPSimpleClient:
             access_token (Optional[str], optional): Access token for authentication. Defaults to None.
             username (Optional[str], optional): Username for basic authentication (ignored if access_token is provided). Defaults to None.
             password (Optional[str], optional): Password for basic authentication (ignored if access_token is provided). Defaults to None.
-            headers (Optional[dict], optional): Additional headers to include in the WebSocket request. Defaults to None.
+            headers (Optional[Union[dict, str]], optional): Additional headers to include in the WebSocket request. Defaults to None. If a string is provided, it will be parsed as JSON.
             verify (Optional[Any], optional): SSL verification options. Defaults to None.
             max_reconnect_attempts (int, optional): Maximum number of reconnection attempts. Defaults to 5.
             req_session (Optional[RequestSession], optional): RequestSession object to use. If None provided, a default one will be created. Defaults to None.
@@ -243,9 +243,9 @@ class ETPSimpleClient:
         # Headers
         if isinstance(headers, dict):
             self.headers = self.headers | headers
-        elif isinstance(headers, list):
-            for a_h in headers or []:
-                self.headers = self.headers | a_h
+        # elif isinstance(headers, list):
+        #     for a_h in headers or []:
+        #         self.headers = self.headers | a_h
         elif isinstance(headers, str):
             try:
                 self.headers = json.loads(headers)
@@ -568,9 +568,12 @@ class ETPSimpleClient:
             if DEBUG:
                 # only use for debugging
                 _dg_msg = Message.decode_binary_message(msg_to_send, ETPConnection.generic_transition_table)
-                MSG_ID_LOGGER.debug(
-                    f"[{self.url}] Sending: [{m_id:0>4.0f} ==> {_dg_msg.header.message_id:0>4.0f}] {type(_dg_msg.body)} final ? {_dg_msg.is_final_msg()}"
-                )
+                if _dg_msg is not None:
+                    MSG_ID_LOGGER.debug(
+                        f"[{self.url}] Sending: [{m_id:0>4.0f} ==> {_dg_msg.header.message_id:0>4.0f}] {type(_dg_msg.body)} final ? {_dg_msg.is_final_msg()}"
+                    )
+                else:
+                    MSG_ID_LOGGER.debug(f"[{self.url}] Sending: [{m_id:0>4.0f}] (could not decode message)")
             self.ws.send(msg_to_send, websocket.ABNF.OPCODE_BINARY)
             if msg_id < 0:
                 msg_id = m_id

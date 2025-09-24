@@ -22,14 +22,13 @@ from etpproto.protocols.dataspace import DataspaceHandler
 from energyml.utils.serialization import read_energyml_xml_bytes, serialize_json
 from energyml.utils.introspection import get_obj_uri
 from energyml.utils.uri import parse_uri
-from py_etp_client import (
-    GetDataspacesResponse,
-)
+from py_etp_client import GetDataspacesResponse, ProtocolException
 from etptypes.energistics.etp.v12.datatypes.message_header import (
     MessageHeader,
 )
 
 from py_etp_client.requests import get_dataspaces
+from py_etp_client.utils import pe_as_str
 
 
 def start_client() -> ETPClient:
@@ -77,6 +76,12 @@ def main():
     except TimeoutError as e:
         logging.info(f"Error: {e}")
 
+    if not dataspace_list:
+        print("No dataspace found.")
+        return
+    elif isinstance(dataspace_list, ProtocolException):
+        print(pe_as_str(dataspace_list))
+        return
     ds = dataspace_list[0]
     if "default" in ds.uri:
         ds = dataspace_list[1]

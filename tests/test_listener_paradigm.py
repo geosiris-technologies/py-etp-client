@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2022-2023 Geosiris.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Simple test script to verify the listener paradigm implementation in ETPSimpleClient.
 """
@@ -8,7 +11,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "py_etp_client"))
 
-from py_etp_client.etpsimpleclient import ETPSimpleClient, EventType
+from py_etp_client.etpsimpleclient import ETPSimpleClient, EventType  # noqa: E402
 
 
 def test_listener_paradigm():
@@ -64,12 +67,12 @@ def test_listener_paradigm():
     # Test 3: Remove listener
     print("\nTest 3: Removing listeners...")
     success = client.remove_listener(EventType.ON_ERROR, test_listener)
-    assert success == True
+    assert success
     assert len(client.listeners[EventType.ON_ERROR]) == 1  # One listener remaining
 
     # Try to remove non-existent listener
     success = client.remove_listener(EventType.ON_ERROR, test_listener)
-    assert success == False  # Should return False since listener was already removed
+    assert not success  # Should return False since listener was already removed
     print("✓ Listener removal works correctly")
 
     # Test 4: Error handling in listeners
@@ -87,7 +90,7 @@ def test_listener_paradigm():
     # Test 5: Validate EventType enum
     print("\nTest 5: EventType enum validation...")
     try:
-        client.add_listener("invalid_event", test_listener)
+        client.add_listener("invalid_event", test_listener)  # type: ignore
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "event_type must be an instance of EventType" in str(e)

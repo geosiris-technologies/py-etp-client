@@ -105,6 +105,13 @@ from energyml.utils.serialization import (
     JSON_VERSION,
 )
 
+from py_etp_client.utils import (
+    T_UriSingleOrGrouped,
+    get_valid_uri_str,
+    reshape_uris_as_str_dict,
+    reshape_uris_as_str_list,
+)
+
 
 def read_energyml_obj(data: Union[str, bytes], format_: str) -> Any:
     if isinstance(data, str):
@@ -150,7 +157,7 @@ def default_request_session():
     rq = RequestSession(
         applicationName="Geosiris etp client",
         applicationVersion="0.1.0",
-        clientInstanceId=gen_uuid(),
+        clientInstanceId=gen_uuid(),  # type: ignore
         requestedProtocols=list(
             filter(
                 lambda sp: sp.protocol != 0,
@@ -166,9 +173,9 @@ def default_request_session():
                 ],
             )
         ),  # ETPConnection.server_capabilities.supported_protocols
-        supportedDataObjects=ETPConnection.server_capabilities.supported_data_objects,
-        supportedCompression=ETPConnection.server_capabilities.supported_compression,
-        supportedFormats=ETPConnection.server_capabilities.supported_formats,
+        supportedDataObjects=ETPConnection.server_capabilities.supported_data_objects,  # type: ignore
+        supportedCompression=ETPConnection.server_capabilities.supported_compression,  # type: ignore
+        supportedFormats=ETPConnection.server_capabilities.supported_formats,  # type: ignore
         currentDateTime=epoch(),
         endpointCapabilities={},
         earliestRetainedChangeTime=0,
@@ -200,7 +207,7 @@ def get_resources(
         context=ContextInfo(
             uri=uri,
             depth=depth,
-            dataObjectTypes=data_object_types or [],
+            dataObjectTypes=data_object_types or [],  # type: ignore
             navigableEdges=RelationshipKind.PRIMARY,
         ),
         scope=get_scope(scope),
@@ -216,10 +223,10 @@ def get_deleted_resources(
     delete_time_filter: Optional[int] = None,
     data_object_types: list = [],
 ):
-    ds_uri = "eml:///dataspace('" + dataspace + "')" if "eml:///" not in dataspace else dataspace
+    ds_uri = get_valid_uri_str(dataspace)
     return GetDeletedResources(
         dataspaceUri=ds_uri,
-        deleteTimeFilter=delete_time_filter,
+        deleteTimeFilter=delete_time_filter,  # type: ignore
         dataObjectTypes=data_object_types,
     )
 
@@ -236,9 +243,20 @@ def get_dataspaces():
     return GetDataspaces(storeLastWriteFilter=None)
 
 
-def put_dataspace(dataspace_names: list, custom_data: Optional[dict] = None):
+def put_dataspace(dataspace_names: T_UriSingleOrGrouped, custom_data: Optional[dict] = None) -> PutDataspaces:
+    """Create or update dataspace(s).
+
+    Args:
+        dataspace_names (T_UriSingleOrGrouped): The name(s) of the dataspace(s) to create or update.
+        custom_data (Optional[dict], optional): Custom data to include in the request. Defaults to None.
+
+    Returns:
+        PutDataspaces: The PutDataspaces request object.
+    """
     ds_map = {}
     now = epoch()
+
+    dataspace_names = reshape_uris_as_str_dict(dataspace_names)
 
     custom_data_reshaped = None
     if custom_data is not None:
@@ -279,9 +297,9 @@ def delete_dataspace(dataspace_names: list):
 # /____/\__/\____/_/   \___/
 
 
-def delete_data_object(uris: list):
+def delete_data_object(uris: T_UriSingleOrGrouped):
     return DeleteDataObjects(
-        uris={str(i): uris[i] for i in range(len(uris))},
+        uris=reshape_uris_as_str_dict(uris),
         pruneContainedObjects=False,
     )
 
@@ -306,8 +324,8 @@ def _create_resource(obj: Any, dataspace_name: Optional[str] = None) -> Resource
     return Resource(
         uri=uri,
         name=get_object_attribute(obj, "Citation.Title"),
-        sourceCount=0,
-        targetCount=nb_ref,
+        sourceCount=0,  # type: ignore
+        targetCount=nb_ref,  # type: ignore
         lastChanged=last_changed,
         storeLastWrite=date,
         storeCreated=date,
@@ -317,7 +335,7 @@ def _create_resource(obj: Any, dataspace_name: Optional[str] = None) -> Resource
     )
 
 
-def _create_data_object(
+def create_data_object(
     obj: Optional[Any] = None, obj_as_str: Optional[str] = None, format="xml", dataspace_name: Optional[str] = None
 ):
     if obj is None and obj_as_str is None:
@@ -336,7 +354,7 @@ def _create_data_object(
     print(get_obj_uuid(obj))
     return DataObject(
         data=obj_as_str.encode("utf-8") if isinstance(obj_as_str, str) else obj_as_str,
-        blobId=pyUUID.UUID(get_obj_uuid(obj)).hex,
+        blobId=pyUUID.UUID(get_obj_uuid(obj)).hex,  # type: ignore
         resource=_create_resource(obj=obj, dataspace_name=dataspace_name),
         format=format,
     )
@@ -436,7 +454,7 @@ def get_any_array(
     array = array.flatten()
     # logging.debug("\t@get_any_array: type array : %s", type(array.tolist()))
     # logging.debug("\t@get_any_array: type inside : %s", type(array.tolist()[0]))
-    return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))
+    return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))  # type: ignore
 
 
 #    _____                              __           __   __

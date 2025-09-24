@@ -13,7 +13,7 @@ class ETPConfig:
     # Access the environment variables
 
     PORT = os.getenv("PORT", "443")
-    URL = os.getenv("URL")
+    URL: str = os.getenv("URL", "localhost")
     USERNAME = os.getenv("USERNAME")
     PASSWORD = os.getenv("PASSWORD")
     ADDITIONAL_HEADERS = os.getenv("ADDITIONAL_HEADERS")

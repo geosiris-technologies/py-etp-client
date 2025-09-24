@@ -51,7 +51,7 @@ class DataStorage:
         res = []
         if self.epc is not None:
             if "source" in scope.lower():
-                rels = self.epc.compute_rels()
+                rels = self.epc.compute_rels()  # noqa: F841
         # TODO: Implement this for EPC data storage
         raise Exception("Method not implemented for EPC data storage.")
 

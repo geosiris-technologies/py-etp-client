@@ -1,3 +1,5 @@
+# Copyright (c) 2022-2023 Geosiris.
+# SPDX-License-Identifier: Apache-2.0
 import numpy as np
 from py_etp_client.requests import get_array_class_from_dtype
 
