@@ -243,6 +243,20 @@ class ETPClient(ETPSimpleClient):
 
         self.active_transaction = None
 
+    def start_and_wait_connected(self, timeout: int = 10) -> bool:
+        """Start the client and wait until connected or timeout.
+
+        Args:
+            timeout (int, optional): Maximum time to wait for connection in seconds. Defaults to 10.
+        Returns:
+            bool: True if the client is connected, False if timeout occurs.
+        """
+        self.start()
+        start_time = perf_counter()
+        while not self.is_connected() and perf_counter() - start_time < timeout:
+            sleep(0.25)
+        return self.is_connected()
+
     #    ______
     #   / ____/___  ________
     #  / /   / __ \/ ___/ _ \

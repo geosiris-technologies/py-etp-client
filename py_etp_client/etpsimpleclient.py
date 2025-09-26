@@ -220,25 +220,21 @@ class ETPSimpleClient:
         self.sslopt = None
         # Cache for received msg
         self.recieved_msg_dict = {}
-        self.max_reconnect_attempts = max_reconnect_attempts
+        self.max_reconnect_attempts = max_reconnect_attempts or 3
 
         # Dictionary to store waiting requests {message_id: (Event, response)}
         self.pending_requests = {}
 
-        if self.spec is None:
-            self.spec = ETPConnection(connection_type=ConnectionType.CLIENT)
-            # raise Exception(
-            #     "You must provide an ETPConnection instance to define your client/server spec"
-            # )
-        if self.spec.client_info is None:
-            self.spec.client_info = ClientInfo(
+        self.client_info = (
+            ClientInfo(
                 login=username or "GeosirisETPClient",
                 endpoint_capabilities={},
             )
-        if "MaxWebSocketFramePayloadSize" not in self.spec.client_info.endpoint_capabilities:
-            self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
-        if "MaxWebSocketMessagePayloadSize" not in self.spec.client_info.endpoint_capabilities:
-            self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = 900000
+            if self.spec is not None
+            else None
+        )
+
+        self._init_connection()
 
         # Headers
         if isinstance(headers, dict):
@@ -267,6 +263,17 @@ class ETPSimpleClient:
         # SSL
         if isinstance(verify, bool) and not verify:
             self.sslopt = {"cert_reqs": ssl.CERT_NONE}
+
+    def _init_connection(self) -> None:
+        if self.spec is None:
+            self.spec = ETPConnection(connection_type=ConnectionType.CLIENT)
+            if self.client_info is not None:
+                self.spec.client_info = self.client_info
+
+            if "MaxWebSocketFramePayloadSize" not in self.spec.client_info.endpoint_capabilities:
+                self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
+            if "MaxWebSocketMessagePayloadSize" not in self.spec.client_info.endpoint_capabilities:
+                self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = 900000
 
     def add_listener(self, event_type: EventType, callback: Callable[..., None]) -> None:
         """
@@ -346,66 +353,80 @@ class ETPSimpleClient:
             answer = self.send(req_sess, 4)
             logging.info(f"CONNECTED : {answer}")
         except Exception as e:
+            import traceback
+
+            traceback.print_exc()
             logging.error(e)
 
         self._notify_listeners(EventType.ON_OPEN, ws=ws)
 
     def _run_websocket(self):
         """Runs the WebSocket connection in a separate thread with configurable reconnection attempts."""
-        print(self.headers)
+        logging.debug(self.headers)
 
         reconnect_count = 0
+        try:
+            while reconnect_count <= self.max_reconnect_attempts and not self.stop_event.is_set():
+                try:
+                    self.ws = websocket.WebSocketApp(
+                        self.url,
+                        subprotocols=[ETPConnection.SUB_PROTOCOL],
+                        header=self.headers,
+                        on_open=self.on_open,
+                        on_message=self.on_message,
+                        on_error=self.on_error,
+                        on_close=self.on_close,
+                    )
 
-        while reconnect_count <= self.max_reconnect_attempts and not self.stop_event.is_set():
-            try:
-                self.ws = websocket.WebSocketApp(
-                    self.url,
-                    subprotocols=[ETPConnection.SUB_PROTOCOL],
-                    header=self.headers,
-                    on_open=self.on_open,
-                    on_message=self.on_message,
-                    on_error=self.on_error,
-                    on_close=self.on_close,
-                )
+                    logging.info(
+                        f"Connecting to {self.url} ... (attempt {reconnect_count + 1}/{self.max_reconnect_attempts + 1})"
+                    )
 
-                logging.info(
-                    f"Connecting to {self.url} ... (attempt {reconnect_count + 1}/{self.max_reconnect_attempts + 1})"
-                )
+                    if self.sslopt:
+                        self.ws.run_forever(sslopt=self.sslopt, reconnect=False)
+                    else:
+                        self.ws.run_forever(reconnect=False)
 
-                if self.sslopt:
-                    self.ws.run_forever(sslopt=self.sslopt, reconnect=False)
+                    # Connection closed normally
+                    if self.stop_event.is_set():
+                        logging.info("Connection stopped by user request")
+                        break
+
+                except Exception as e:
+                    logging.error(f"WebSocket connection failed (attempt {reconnect_count + 1}): {e}")
+
+                reconnect_count += 1
+
+                if reconnect_count <= self.max_reconnect_attempts and not self.stop_event.is_set():
+                    # Exponential backoff: 2, 4, 8, 16, 30 seconds
+                    wait_time = min(2**reconnect_count, 30)
+                    logging.info(f"Reconnecting in {wait_time} seconds...")
+                    if self.stop_event.wait(wait_time):
+                        break
                 else:
-                    self.ws.run_forever(reconnect=False)
-
-                # Connection closed normally
-                if self.stop_event.is_set():
-                    logging.info("Connection stopped by user request")
+                    if reconnect_count > self.max_reconnect_attempts:
+                        logging.error(f"Maximum reconnection attempts ({self.max_reconnect_attempts}) reached")
+                    self.closed = True
                     break
+        except Exception as e:
+            import traceback
 
-            except Exception as e:
-                logging.error(f"WebSocket connection failed (attempt {reconnect_count + 1}): {e}")
-
-            reconnect_count += 1
-
-            if reconnect_count <= self.max_reconnect_attempts and not self.stop_event.is_set():
-                # Exponential backoff: 2, 4, 8, 16, 30 seconds
-                wait_time = min(2**reconnect_count, 30)
-                logging.info(f"Reconnecting in {wait_time} seconds...")
-                if self.stop_event.wait(wait_time):
-                    break
-            else:
-                if reconnect_count > self.max_reconnect_attempts:
-                    logging.error(f"Maximum reconnection attempts ({self.max_reconnect_attempts}) reached")
-                self.closed = True
-                break
+            traceback.print_exc()
 
     def start(self):
         """Start the WebSocket connection in a separate thread."""
+
+        self.ws = None
+        self.closed = False
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.recieved_msg_dict = {}
+        self.pending_requests = {}
+        self._init_connection()
         if self.thread is None or not self.thread.is_alive():
             self.thread = threading.Thread(target=self._run_websocket, daemon=True)
             self.thread.start()
             time.sleep(1)  # Allow time for connection
-
         self._notify_listeners(EventType.START)
 
     def stop(self):
@@ -418,6 +439,7 @@ class ETPSimpleClient:
         if self.thread and self.thread != threading.current_thread():
             self.thread.join()
             self.thread = None
+        self.spec = None
 
         self._notify_listeners(EventType.STOP)
 
