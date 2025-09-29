@@ -31,6 +31,7 @@ output*
 **/*_.yml
 **/poetry.lock
 configs/gabbro
+configs/**/*.json
 
 
 downloads

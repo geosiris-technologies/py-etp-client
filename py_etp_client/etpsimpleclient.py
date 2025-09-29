@@ -58,8 +58,9 @@ from etptypes.energistics.etp.v12.protocol.core.request_session import (
     RequestSession,
 )
 
+from py_etp_client.etpconfig import ETPConfig, ServerConfig
 from py_etp_client.requests import default_request_session
-from py_etp_client.auth import basic_auth_encode
+from py_etp_client.auth import BasicAuthConfig, TokenManager
 from py_etp_client import CloseSession
 
 # To enable handlers
@@ -126,6 +127,7 @@ class ETPSimpleClient:
         verify: Optional[Any] = None,
         max_reconnect_attempts: int = 5,
         req_session: Optional[RequestSession] = None,
+        config: Optional[Union[ETPConfig, ServerConfig]] = None,
     ):
         """Initializes the ETPSimpleClient with the given parameters.
         This class is a simple WebSocket client for ETP (Energistics Transfer Protocol) connections.
@@ -199,42 +201,17 @@ class ETPSimpleClient:
             verify (Optional[Any], optional): SSL verification options. Defaults to None.
             max_reconnect_attempts (int, optional): Maximum number of reconnection attempts. Defaults to 5.
             req_session (Optional[RequestSession], optional): RequestSession object to use. If None provided, a default one will be created. Defaults to None.
+            config (Optional[Union[ETPConfig, ServerConfig]], optional): Configuration object for server settings. Defaults to None.
         """
         self.url = url
-        if not self.url.startswith("ws"):
-            if self.url.lower().startswith("http"):
-                self.url = "ws" + self.url[4:]
-            else:
-                self.url = "wss://" + self.url
 
         self.spec = spec
         self.access_token = access_token
         self.headers = {}
-        self.ws = None
-        self.thread = None
-        self.stop_event = threading.Event()
-        self.lock = threading.Lock()
         self.request_session = req_session or default_request_session()
-        # other attributes
-        self.closed = False
-        self.sslopt = None
-        # Cache for received msg
-        self.recieved_msg_dict = {}
         self.max_reconnect_attempts = max_reconnect_attempts or 3
-
-        # Dictionary to store waiting requests {message_id: (Event, response)}
-        self.pending_requests = {}
-
-        self.client_info = (
-            ClientInfo(
-                login=username or "GeosirisETPClient",
-                endpoint_capabilities={},
-            )
-            if self.spec is not None
-            else None
-        )
-
-        self._init_connection()
+        self.verify = verify
+        self.token_manager = TokenManager()
 
         # Headers
         if isinstance(headers, dict):
@@ -255,25 +232,88 @@ class ETPSimpleClient:
                 self.access_token = f"Bearer {self.access_token}"
             self.headers["Authorization"] = self.access_token
         elif username is not None and password is not None:
-            self.headers["Authorization"] = "Basic " + basic_auth_encode(username, password)
+            self.headers["Authorization"] = "Basic " + str(
+                self.token_manager._get_basic_auth_token(BasicAuthConfig(username, password))
+            )
 
         # Listener infrastructure
         self.listeners: Dict[EventType, List[Callable[..., None]]] = {event_type: [] for event_type in EventType}
 
+        # other attributes
+        self.closed = False
+        self.sslopt = None
+        self.ws = None
+        self.thread = None
+        self.stop_event = threading.Event()
+        self.lock = threading.Lock()
+        # Cache for received msg
+        self.recieved_msg_dict = {}
+
+        # Dictionary to store waiting requests {message_id: (Event, response)}
+        self.pending_requests = {}
+
+        self.client_info = (
+            ClientInfo(
+                login=username or "GeosirisETPClient",
+                endpoint_capabilities={},
+            )
+            if self.spec is not None
+            else None
+        )
+
+        if config is not None:
+            if isinstance(config, ETPConfig):
+                config = config.as_server_config()
+
+            self.url = config.url or self.url
+            self.verify = config.verify_ssl if self.verify is None else self.verify
+            # self.max_reconnect_attempts = (
+            #     config.auto_reconnect if config.auto_reconnect is not None else self.max_reconnect_attempts
+            # )
+            self.headers = (
+                self.headers.update(config.additional_headers or {})
+                if self.headers
+                else config.additional_headers or {}
+            )
+            logging.debug(f"\n\nWebSocket Headers: {self.headers}")
+            self.access_token = self.token_manager.get_token(config)
+            if self.access_token is not None:
+                self.headers["Authorization"] = self.access_token
+
+        if not self.url.startswith("ws"):
+            if self.url.lower().startswith("http"):
+                self.url = "ws" + self.url[4:]
+            else:
+                self.url = "wss://" + self.url
+
+        logging.debug(f"WebSocket URL set to: {self.url}")
+        logging.debug(f"WebSocket Headers: {self.headers}")
+        self._init_connection(config)
+
         # SSL
-        if isinstance(verify, bool) and not verify:
+        if isinstance(self.verify, bool) and not self.verify:
             self.sslopt = {"cert_reqs": ssl.CERT_NONE}
 
-    def _init_connection(self) -> None:
+    def _init_connection(self, config: Optional[ServerConfig] = None) -> None:
         if self.spec is None:
             self.spec = ETPConnection(connection_type=ConnectionType.CLIENT)
             if self.client_info is not None:
                 self.spec.client_info = self.client_info
 
             if "MaxWebSocketFramePayloadSize" not in self.spec.client_info.endpoint_capabilities:
-                self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
+                if config is not None:
+                    self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = (
+                        config.max_web_socket_frame_payload_size or 900000
+                    )
+                else:
+                    self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
             if "MaxWebSocketMessagePayloadSize" not in self.spec.client_info.endpoint_capabilities:
-                self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = 900000
+                if config is not None:
+                    self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = (
+                        config.max_web_socket_message_payload_size or 900000
+                    )
+                else:
+                    self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = 900000
 
     def add_listener(self, event_type: EventType, callback: Callable[..., None]) -> None:
         """
@@ -423,6 +463,8 @@ class ETPSimpleClient:
             self.thread.start()
             time.sleep(1)  # Allow time for connection
         self._notify_listeners(EventType.START)
+
+        logging.debug("WebSocket client started. with headers : %s", self.headers)
 
     def stop(self):
         """Gracefully stop the WebSocket connection."""

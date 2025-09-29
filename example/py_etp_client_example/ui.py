@@ -5,14 +5,14 @@ import json
 import logging
 import os
 import traceback
-from typing import Optional
+from typing import Optional, Union
 from time import sleep, perf_counter
 
 import numpy as np
 
-from py_etp_client.auth import basic_auth_encode
+from py_etp_client.auth import BasicAuthConfig, TokenManager
 from py_etp_client.etpclient import ETPClient
-from py_etp_client.etpconfig import ETPConfig
+from py_etp_client.etpconfig import ETPConfig, ServerConfig
 from py_etp_client import ProtocolException, AuthorizeResponse
 from py_etp_client.requests import get_property_kind_and_parents, read_energyml_obj
 from etpproto.connection import ConnectionType
@@ -39,26 +39,31 @@ if __H5PY_MODULE_EXISTS__:
     from py_etp_client.utils import h5_list_datasets
 
 
-def start_client(config: Optional[ETPConfig] = None) -> ETPClient:
+def start_client(config: Optional[Union[ETPConfig, ServerConfig]] = None, verify: bool = False) -> ETPClient:
     config = config or ETPConfig()
 
-    add_h = config.ADDITIONAL_HEADERS
-
-    if isinstance(add_h, str):
-        try:
-            add_h = json.loads(add_h)
-        except json.JSONDecodeError:
-            add_h = {}
-
-    client = ETPClient(
-        url=config.URL,
-        spec=ETPConnection(connection_type=ConnectionType.CLIENT),
-        access_token=config.ACCESS_TOKEN,
-        username=config.USERNAME,
-        password=config.PASSWORD,
-        headers=add_h or {},
-        verify=True,
-    )
+    if isinstance(config, ETPConfig):
+        add_h = config.ADDITIONAL_HEADERS or {}
+        if isinstance(add_h, str):
+            try:
+                add_h = json.loads(add_h)
+            except json.JSONDecodeError:
+                logging.error("Failed to parse ADDITIONAL_HEADERS as JSON. Using empty headers.")
+                add_h = {}
+        client = ETPClient(
+            url=config.URL,
+            spec=ETPConnection(connection_type=ConnectionType.CLIENT),
+            access_token=config.ACCESS_TOKEN,
+            username=config.USERNAME,
+            password=config.PASSWORD,
+            headers=add_h,
+            verify=verify,
+        )
+    else:
+        client = ETPClient(
+            spec=ETPConnection(connection_type=ConnectionType.CLIENT),
+            config=config,
+        )
     client.start()
 
     start_time = perf_counter()
@@ -66,6 +71,7 @@ def start_client(config: Optional[ETPConfig] = None) -> ETPClient:
         sleep(0.25)
     if not client.is_connected():
         logging.info("The ETP session could not be established in 5 seconds.")
+        raise Exception(f"Connexion not established with {config.url}")
     else:
         logging.info("Now connected to ETP Server")
 
@@ -74,9 +80,11 @@ def start_client(config: Optional[ETPConfig] = None) -> ETPClient:
 
 def looper():
     """A simple looper to keep the script running."""
-    config = ETPConfig()
+    # config = ETPConfig()
+    # log_file_path = "logs/" + (".".join(config.URL.split(".")[-2:]).split("/")[0] or "localhost") + "_ui.log"  # type: ignore
+    config = ServerConfig.from_file()
+    log_file_path = "logs/" + (".".join(config.url.split(".")[-2:]).split("/")[0] or "localhost") + "_ui.log"  # type: ignore
 
-    log_file_path = "logs/" + (".".join(config.URL.split(".")[-2:]).split("/")[0] or "localhost") + "_ui.log"  # type: ignore
     print(f"Log file is : {log_file_path}")
     logging.basicConfig(
         filename=f"{log_file_path}",
@@ -123,7 +131,8 @@ def looper():
                 res = None
                 if len(args) == 2:
                     # transform username and password into basic auth encoded in base64
-                    basic = basic_auth_encode(args[0], args[1])
+                    tm = TokenManager()
+                    basic = tm._get_basic_auth_token(BasicAuthConfig(args[0], args[1]))
                     res = client.authorize(authorization=f"Basic {basic}")
                 elif len(args) == 1:
                     # transform access token into bearer auth
@@ -179,10 +188,10 @@ def looper():
                     elif acl_option == "1":
                         resp = client.put_dataspaces_with_acl(
                             ds_name,
-                            acl_owners=config.ACL_OWNERS,
-                            acl_viewers=config.ACL_VIEWERS,
-                            legal_tags=config.LEGAL_TAGS,
-                            other_relevant_data_countries=config.OTHER_RELEVANT_DATA_COUNTRIES,
+                            acl_owners=config.acl_owners,
+                            acl_viewers=config.acl_viewers,
+                            legal_tags=config.legal_tags,
+                            other_relevant_data_countries=config.data_countries,
                             timeout=20,
                         )
                     elif acl_option == "2":
@@ -224,7 +233,7 @@ def looper():
                     print("Please provide a name for the dataspace.")
             elif "delete" in command and "dataspace" in command:
                 if args:
-                    resp = client.delete_dataspace([args[0]], timeout=20)
+                    resp = client.delete_dataspace(args[0], timeout=20)
                     if resp:
                         print(f"Dataspace {args[0]} deletion response : {resp}")
                     else:
@@ -450,7 +459,7 @@ def looper():
                                     continue
 
                                 try:
-                                    datasets_names = h5_list_datasets(h5_file_path=h5_path)  # type: ignore
+                                    datasets_names = h5_list_datasets(h5_file_path=h5_path)
                                     print("TODO : fix uri for h5 upload to use object uri and not just dataspace uri")
                                     with h5py.File(h5_path, "r") as h5_file:  # type: ignore
                                         for ds in datasets_names:
@@ -496,6 +505,7 @@ def looper():
                         types_filter=args[2:] if len(args) >= 3 else None,
                         timeout=60,
                     )
+
                     ds_name = args[0]
                     try:
                         ds_name = parse_uri(ds_name).dataspace
@@ -511,8 +521,16 @@ def looper():
                         for res in sorted_resp:
                             try:
                                 with open(f"{folder_path}/{res.uri.split('/')[-1]}.{ext}", "wb") as f:
-                                    f.write(client.get_data_object(uris=res.uri, format_=ext))
-                                    print("\t\tDownloaded: ", res.uri.split("/")[-1])
+                                    _do = client.get_data_object(uris=res.uri, format_=ext)
+                                    if isinstance(_do, ProtocolException):
+                                        print(f"Failed to download {res.uri}: {pe_as_str(_do)}")
+                                        continue
+                                    elif isinstance(_do, (str, bytes)):
+                                        f.write(_do.encode("utf-8") if isinstance(_do, str) else _do)
+                                        print("\t\tDownloaded: ", res.uri.split("/")[-1])
+                                    else:
+                                        print(f"Failed to download {res.uri}: unexpected response type {type(_do)}")
+                                        continue
                             except Exception as e:
                                 print(f"Failed to download {res.uri}: {e}")
                     elif isinstance(resp, ProtocolException):

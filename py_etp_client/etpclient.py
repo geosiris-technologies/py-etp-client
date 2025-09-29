@@ -49,7 +49,7 @@ import numpy as np
 from energyml.utils.uri import Uri as ETPUri
 from energyml.utils.epc import Epc
 from energyml.utils.constants import epoch
-from py_etp_client.etpconfig import ETPConfig
+from py_etp_client.etpconfig import ETPConfig, ServerConfig
 from py_etp_client.requests import get_any_array_type, read_energyml_obj
 
 
@@ -192,14 +192,15 @@ class ETPClient(ETPSimpleClient):
 
     def __init__(
         self,
-        url,
-        spec: Optional[ETPConnection],
+        url: Optional[str] = None,
+        spec: Optional[ETPConnection] = None,
         access_token: Optional[str] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
         headers: Optional[Union[dict, str]] = None,
         verify: Optional[Any] = None,
         req_session: Optional[RequestSession] = None,
+        config: Optional[Union[ETPConfig, ServerConfig]] = None,
     ):
         """
         Initialize the ETPClient with connection parameters.
@@ -239,6 +240,7 @@ class ETPClient(ETPSimpleClient):
             headers=headers,
             verify=verify,
             req_session=req_session,
+            config=config,
         )
 
         self.active_transaction = None
