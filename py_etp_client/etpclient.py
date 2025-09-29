@@ -50,7 +50,7 @@ from energyml.utils.uri import Uri as ETPUri
 from energyml.utils.epc import Epc
 from energyml.utils.constants import epoch
 from py_etp_client.etpconfig import ETPConfig, ServerConfig
-from py_etp_client.requests import get_any_array_type, read_energyml_obj
+from py_etp_client.requests import get_any_array_type, get_any_array_type_size, read_energyml_obj
 
 
 from py_etp_client.etpsimpleclient import ETPSimpleClient
@@ -105,6 +105,9 @@ from py_etp_client import (
     ProtocolException,
     PutDataArrays,
     PutDataArraysResponse,
+    PutDataSubarrays,
+    PutDataSubarraysType,
+    PutDataSubarraysResponse,
     PutDataArraysType,
     PutDataObjects,
     PutDataObjectsResponse,
@@ -118,6 +121,27 @@ from py_etp_client import (
     PutUninitializedDataArraysResponse,
     PutUninitializedDataArrayType,
 )
+
+
+def get_type_size(data_type: str) -> int:
+    """
+    Return the size in bytes of a given data type. Supports numpy dtypes and common string types.
+    Accepts:
+      - numpy.dtype or string convertible to numpy dtype
+      - 'string', 'bytes', 'boolean' (special handling)
+    """
+    try:
+        # Try to interpret as numpy dtype
+        dtype = np.dtype(data_type)
+        return dtype.itemsize
+    except Exception:
+        # Fallback for non-numpy types
+        if data_type in ("string", "bytes"):
+            return 1  # Variable length, assume 1 byte per char/byte
+        elif data_type in ("boolean", "bool"):
+            return 1
+        else:
+            raise NotImplementedError(f"Unknown data type: {data_type}")
 
 
 class ETPClient(ETPSimpleClient):
@@ -840,7 +864,7 @@ class ETPClient(ETPSimpleClient):
                         )
                     )
             else:
-                logging.error("Error: %s", gdar.body)
+                logging.error("@get_data_array Error: %s", gdar.body)
         return array
 
     def get_data_subarray(
@@ -858,6 +882,8 @@ class ETPClient(ETPSimpleClient):
         Returns:
             Optional[np.ndarray]: the array, NOT reshaped in the correct dimension. The result is a flat array !
         """
+        start = [int(s) for s in start]
+        count = [int(c) for c in count]
         gdar_msg_list = self.send_and_wait(
             GetDataSubarrays(
                 dataSubarrays={
@@ -934,6 +960,8 @@ class ETPClient(ETPSimpleClient):
         Returns:
             bool: True if the array has been successfully put
         """
+
+        print(" datatype", data_type if isinstance(data_type, AnyArrayType) else get_any_array_type(data_type))
         uri = get_valid_uri_str(uri)
         pdar_msg_list = self.send_and_wait(
             PutUninitializedDataArrays(
@@ -959,7 +987,8 @@ class ETPClient(ETPSimpleClient):
 
         for pdar in pdar_msg_list:
             if isinstance(pdar.body, PutUninitializedDataArraysResponse):
-                return pdar.body.success.get(uri, None) is not None
+                print(pdar.body)
+                return pdar.body.success.get("0", None) is not None
             else:
                 logging.error("Error: %s", pdar.body)
         return False
@@ -968,7 +997,7 @@ class ETPClient(ETPSimpleClient):
         self,
         uri: Union[str, ETPUri],
         path_in_resource: str,
-        array_flat: Union[np.ndarray, list],
+        array: Union[np.ndarray, list],
         dimensions: Union[List[int], Tuple[int, ...]],
         timeout: int = 5,
     ) -> Dict[str, bool]:
@@ -977,7 +1006,7 @@ class ETPClient(ETPSimpleClient):
         Args:
             uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
             path_in_resource (str): path to the array. Must be the same than in the original object
-            array_flat (Union[np.array, list]): a flat array
+            array (Union[np.array, list]): a flat array
             dimensions (List[int]): dimensions of the array (as list of int)
             timeout (int, optional): Defaults to 5.
 
@@ -992,7 +1021,7 @@ class ETPClient(ETPSimpleClient):
                 dataArrays={
                     "0": PutDataArraysType(
                         uid=DataArrayIdentifier(uri=get_valid_uri_str(uri), pathInResource=path_in_resource),
-                        array=DataArray(dimensions=dimensions, data=get_any_array(array_flat)),  # type: ignore
+                        array=DataArray(dimensions=dimensions, data=get_any_array(array)),  # type: ignore
                     )
                 }
             ),
@@ -1007,6 +1036,259 @@ class ETPClient(ETPSimpleClient):
                 logging.info("Data array put failed: %s ==> %s", pdar, pdar.body)
 
         return res
+
+    def put_data_subarray(
+        self,
+        uri: Union[str, ETPUri],
+        path_in_resource: str,
+        array: Union[np.ndarray, list],
+        start: List[int],
+        count: List[int],
+        timeout: int = 5,
+    ) -> Optional[Union[PutDataSubarraysResponse, ProtocolException]]:
+        """Put a sub part of a data array to the server.
+
+        Args:
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            path_in_resource (str): path to the array. Must be the same than in the original object
+            array (Union[np.array, list]): a flat array
+            start (List[int]): start indices in each dimensions.
+            count (List[int]): Count of element in each dimensions.
+            timeout (int, optional): Defaults to 5.
+
+        Returns:
+            (Optional[Union[PutDataSubarraysResponse, ProtocolException]]): A map of uri and a boolean indicating if the sub array has been successfully put
+        """
+
+        # Convert all elements in count and start to built-in int (avoid numpy types for pydantic)
+        count_py = [int(x) for x in count]
+        start_py = [int(x) for x in start]
+        psar_msg_list = self.send_and_wait(
+            PutDataSubarrays(
+                dataSubarrays={
+                    "0": PutDataSubarraysType(
+                        uid=DataArrayIdentifier(uri=get_valid_uri_str(uri), pathInResource=path_in_resource),
+                        data=get_any_array(array),
+                        starts=start_py,  # type: ignore
+                        counts=count_py,  # type: ignore
+                    )
+                }
+            ),
+            timeout=timeout,
+        )
+
+        for psar in psar_msg_list:
+            if isinstance(psar.body, PutDataSubarraysResponse):
+                return psar.body
+            elif isinstance(psar.body, ProtocolException):
+                return psar.body
+            else:
+                logging.info("Data subarray put failed: %s ==> %s", psar, psar.body)
+
+        return None
+
+    def put_data_array_safe(
+        self,
+        uri: Union[str, ETPUri],
+        path_in_resource: str,
+        array: np.ndarray,
+        max_subarray_size: Optional[int] = None,
+        timeout: int = 5,
+    ) -> Optional[Dict[str, bool]]:
+        """Put a data array to the server.
+        If the array overflow the maximum message size, it will be split in several subarrays and put using multiple PutDataSubarrays messages.
+
+        Args:
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference.
+            path_in_resource (str): path to the array. Must be the same than in the original object
+            array (np.ndarray): a flat array,
+            max_subarray_size (Optional[int], optional): Maximum size of a subarray in bytes. If None, the value of the server capability "MaxWebSocketMessagePayloadSize" will be used. Defaults to None.
+            timeout (int, optional): Defaults to 5.
+
+        Returns:
+            Optional[Dict[str, bool]]: A map of uri and a boolean indicating if the array has been successfully put
+        """
+        uri = get_valid_uri_str(uri)
+        if not isinstance(array, np.ndarray):
+            array = np.asarray(array)
+        total_size_bytes = array.nbytes
+        max_msg_size = (
+            max_subarray_size
+            or self.spec.client_info.getCapability("MaxWebSocketMessagePayloadSize")  # type: ignore
+            or 1048576
+        )  # 1 MB by default
+        logging.info(f"Array size: {total_size_bytes} bytes, Max message size: {max_msg_size} bytes")
+        if total_size_bytes <= max_msg_size:
+            # The array can be sent in a single PutDataArrays message
+            dimensions = list(array.shape)
+            return self.put_data_array(
+                uri=uri,
+                path_in_resource=path_in_resource,
+                array=array.flatten(),
+                dimensions=dimensions,
+                timeout=timeout,
+            )
+        else:
+            # The array must be split in several subarrays and sent using multiple PutDataSubarrays messages
+            logging.info("Array is too large to be sent in a single message, splitting it in subarrays...")
+            dimensions = list(array.shape)
+            data_type = str(array.dtype)
+            type_size = get_type_size(data_type)
+            if type_size is None:
+                logging.error(f"Cannot determine size of data type {data_type}")
+                return None
+            logging.info(f"Array dimensions: {dimensions}, Data type: {data_type}, Type size: {type_size} bytes")
+            # Now, we can determine how to split the array in subarrays
+            # We will try to split the array along the first dimension
+            dim0 = dimensions[0]
+            other_dims = dimensions[1:]
+            other_dims_size = np.prod(other_dims) if len(other_dims) > 0 else 1
+            max_dim0_count = max_msg_size // (other_dims_size * type_size)
+            if max_dim0_count > dim0:
+                max_dim0_count = dim0
+            if max_dim0_count == 0:
+                logging.error(
+                    "Cannot split array, max message size is too small for the array dimensions and data type"
+                )
+                return None
+            logging.info(f"Splitting array along first dimension in chunks of {max_dim0_count} (total {dim0} chunks)")
+
+            # Starting by putting an uninitialized data array
+            if not self.put_uninitialized_data_array(
+                uri=uri,
+                path_in_resource=path_in_resource,
+                data_type=data_type,
+                dimensions=dimensions,
+                timeout=timeout,
+            ):
+                logging.error(f"Failed to put uninitialized data array for {uri}")
+                return None
+            logging.info(f"Uninitialized data array put successfully for {uri}")
+
+            # Now, we can send the array in chunks using PutDataSubarrays messages
+            res = {}
+            nb_splits = (dim0 + max_dim0_count - 1) // max_dim0_count
+            logging.info(f"Sending array in {nb_splits} subarrays...")
+            for start0 in range(0, dim0, max_dim0_count):
+                count0 = min(max_dim0_count, dim0 - start0)
+                start = [start0] + [0] * (len(dimensions) - 1)
+                count = [count0] + other_dims
+                subarray = array[start0 : start0 + count0].flatten()
+                logging.info(
+                    f"[{start0 // max_dim0_count} / {nb_splits}] Sending subarray starting at {start} with count {count} (size {subarray.nbytes} bytes)"
+                )
+                psar_response = self.put_data_subarray(
+                    uri=uri,
+                    path_in_resource=path_in_resource,
+                    array=subarray,
+                    start=start,
+                    count=count,  # type: ignore
+                    timeout=timeout,
+                )
+                if psar_response is None or (isinstance(psar_response, ProtocolException)):
+                    logging.error(f"Failed to put subarray starting at {start} with count {count}: {psar_response}")
+                    res[uri] = False
+                    break
+                else:
+                    res[uri] = True
+
+            return res if len(res) > 0 else None
+
+    def get_data_array_safe(
+        self,
+        uri: Union[str, ETPUri],
+        path_in_resource: str,
+        max_subarray_size: Optional[int] = None,
+        timeout: int = 20,
+    ) -> Optional[np.ndarray]:
+        """Get a data array from the server.
+        After getting data array metadata, the array is retrieved in multiple subarrays using multiple GetDataSubarrays messages if necessary.
+        Args:
+            uri (Union[str, ETPUri]): Usually the uri should be an uri of an ExternalDataArrayPart or an ExternalPartReference for resqml 2.0.1, and the uri of the object itself for resqml > 2.0.1.
+            path_in_resource (str): path to the array. Must be the same than in the original object
+            max_subarray_size (Optional[int], optional): Maximum size of a subarray in bytes. If None, the value of the server capability "MaxWebSocketMessagePayloadSize" will be used. Defaults to None.
+            timeout (int, optional): Defaults to 20.
+        Returns:
+            Optional[np.ndarray]: the array, reshaped in the correct dimension
+        """
+        uri = get_valid_uri_str(uri)
+        metadata_dict = self.get_data_array_metadata(uri=uri, path_in_resource=path_in_resource, timeout=timeout)
+        if "0" not in metadata_dict:
+            logging.error(f"No metadata found for data array {uri} {path_in_resource}")
+            return None
+        metadata = metadata_dict["0"]
+        if metadata.dimensions is None or len(metadata.dimensions) == 0:
+            logging.error(f"No dimensions found in metadata for data array {uri} {path_in_resource}")
+            return None
+        dimensions = metadata.dimensions  # type: ignore
+        if metadata.transport_array_type is None:
+            logging.error(f"No transportArrayType found in metadata for data array {uri} {path_in_resource}")
+            return None
+        data_type = metadata.transport_array_type
+        type_size = get_any_array_type_size(data_type)
+        if type_size is None:
+            logging.error(f"Cannot determine size of data type {data_type}")
+            return None
+        total_size_bytes = type_size * np.prod(dimensions)
+        max_msg_size = (
+            max_subarray_size
+            or self.spec.client_info.getCapability("MaxWebSocketMessagePayloadSize")  # type: ignore
+            or 1048576
+        )  # 1 MB by default
+        logging.info(f"Array size: {total_size_bytes} bytes, Max message size: {max_msg_size} bytes")
+        if total_size_bytes <= max_msg_size:
+            # The array can be retrieved in a single GetDataArrays message
+            return self.get_data_array(uri=uri, path_in_resource=path_in_resource, timeout=timeout)
+        else:
+            # The array must be retrieved in several subarrays using multiple GetDataSubarrays messages
+            logging.info("Array is too large to be retrieved in a single message, splitting it in subarrays...")
+            dimensions = list(dimensions)
+            # Now, we can determine how to split the array in subarrays
+            # We will try to split the array along the first dimension
+            dim0 = dimensions[0]
+            other_dims = dimensions[1:]
+            other_dims_size = np.prod(other_dims) if len(other_dims) > 0 else 1  # type: ignore
+            max_dim0_count = max_msg_size // (other_dims_size * type_size)
+            if max_dim0_count > dim0:  # type: ignore
+                max_dim0_count = dim0
+            if max_dim0_count == 0:
+                logging.error(
+                    "Cannot split array, max message size is too small for the array dimensions and data type"
+                )
+                return None
+            logging.info(f"Splitting array along first dimension in chunks of {max_dim0_count} (total {dim0} chunks)")
+
+            # Now, we can get the array in chunks using GetDataSubarrays messages
+            array = None
+            nb_splits = (dim0 + max_dim0_count - 1) // max_dim0_count  # type: ignore
+            logging.info(f"Retrieving array in {nb_splits} subarrays...")
+            for start0 in range(0, dim0, max_dim0_count):  # type: ignore
+                logging.debug("Progress: %d / %d", start0 // max_dim0_count, nb_splits)  # type: ignore
+                count0 = min(max_dim0_count, dim0 - start0)  # type: ignore
+                start = [start0] + [0] * (len(dimensions) - 1)
+                count = [count0] + other_dims
+                logging.info(
+                    f"[{start0 // max_dim0_count} / {nb_splits}] Retrieving subarray starting at {start} with count {count}"  # type: ignore
+                )
+                subarray = self.get_data_subarray(
+                    uri=uri,
+                    path_in_resource=path_in_resource,
+                    start=start,
+                    count=count,  # type: ignore
+                    timeout=timeout,
+                )
+                if subarray is None:
+                    logging.error(f"Failed to get subarray starting at {start} with count {count}")
+                    return None
+                if array is None:
+                    array = subarray
+                else:
+                    array = np.concatenate((array, subarray))  # type: ignore
+
+            if array is not None:
+                return array.reshape(tuple(dimensions))  # type: ignore
+            else:
+                return None
 
     #    _____                              __           __   ______
     #   / ___/__  ______  ____  ____  _____/ /____  ____/ /  /_  __/_  ______  ___  _____

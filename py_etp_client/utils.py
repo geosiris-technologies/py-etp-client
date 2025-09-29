@@ -66,7 +66,7 @@ def reshape_uris_as_str_list(
     :return: List of strings
     """
     if isinstance(uris, str):
-        return [uris]
+        return [get_valid_uri_str(uris)]
     elif isinstance(uris, ETPUri):
         return [str(uris)]
     elif isinstance(uris, list):

@@ -425,6 +425,20 @@ def get_any_array_type(
     return AnyArrayType.ARRAY_OF_FLOAT
 
 
+def get_any_array_type_size(
+    dtype: AnyArrayType,
+) -> int:
+    if dtype == AnyArrayType.ARRAY_OF_LONG or dtype == AnyArrayType.ARRAY_OF_DOUBLE:
+        return 8
+    elif dtype == AnyArrayType.ARRAY_OF_INT or dtype == AnyArrayType.ARRAY_OF_FLOAT:
+        return 4
+    elif (
+        dtype == AnyArrayType.ARRAY_OF_BOOLEAN or dtype == AnyArrayType.BYTES or dtype == AnyArrayType.ARRAY_OF_STRING
+    ):
+        return 1
+    return 4
+
+
 def get_any_array(
     array: Union[List[Any], np.ndarray],
 ) -> AnyArray:

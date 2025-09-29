@@ -300,20 +300,19 @@ class ETPSimpleClient:
             if self.client_info is not None:
                 self.spec.client_info = self.client_info
 
-            if "MaxWebSocketFramePayloadSize" not in self.spec.client_info.endpoint_capabilities:
-                if config is not None:
-                    self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = (
-                        config.max_web_socket_frame_payload_size or 900000
-                    )
-                else:
-                    self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
-            if "MaxWebSocketMessagePayloadSize" not in self.spec.client_info.endpoint_capabilities:
-                if config is not None:
-                    self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = (
-                        config.max_web_socket_message_payload_size or 900000
-                    )
-                else:
-                    self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = 900000
+        if config is not None and config.max_web_socket_frame_payload_size is not None:
+            self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = (
+                config.max_web_socket_frame_payload_size
+            )
+        elif "MaxWebSocketFramePayloadSize" not in self.spec.client_info.endpoint_capabilities:
+            self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
+
+        if config is not None and config.max_web_socket_message_payload_size is not None:
+            self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = (
+                config.max_web_socket_message_payload_size
+            )
+        elif "MaxWebSocketMessagePayloadSize" not in self.spec.client_info.endpoint_capabilities:
+            self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = 900000
 
     def add_listener(self, event_type: EventType, callback: Callable[..., None]) -> None:
         """

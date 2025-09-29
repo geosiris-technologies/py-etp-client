@@ -136,6 +136,9 @@ from etptypes.energistics.etp.v12.protocol.dataspace.put_dataspaces import (
 from etptypes.energistics.etp.v12.protocol.dataspace.put_dataspaces_response import (
     PutDataspacesResponse,
 )
+from etptypes.energistics.etp.v12.datatypes.data_array_types.put_data_subarrays_type import (
+    PutDataSubarraysType,
+)
 from etptypes.energistics.etp.v12.protocol.discovery.get_deleted_resources import (
     GetDeletedResources,
 )
