@@ -16,6 +16,13 @@ from py_etp_client.auth import AuthConfigs, AuthMethod, EnvironmentSettable, Jso
 from energyml.utils.constants import snake_case
 from typing import Optional
 
+# Documentation generation functions (imported for backward compatibility)
+from py_etp_client.docs import (
+    gen_serverconfig_env_vars_table,
+    gen_authconfig_env_vars_table,
+    gen_all_config_env_vars_tables,
+)
+
 
 ETP_CONFIG_FILE_PATH = "ETP_CONFIG_FILE_PATH"
 ETP_CONFIG_LIST_FILE_PATH = "ETP_CONFIG_LIST_FILE_PATH"
@@ -84,24 +91,36 @@ class ServerConfig(AuthConfigs, EnvironmentSettable):
                 logging.error(f"Failed to load configs from {file_path}: {e}")
                 raise
 
-    _id: str = ""
-    name: str = ""
-    url: str = ""
-    timeout: int = 30
-    max_web_socket_frame_payload_size: int = 900000
-    max_web_socket_message_payload_size: int = 900000
-    verify_ssl: bool = False
-    auto_reconnect: bool = True
-    use_transactions: bool = False
-    token_expires_at: float = 0.0
-    supported_data_objects: List[str] = field(default_factory=list)
-    supported_protocols: List[str] = field(default_factory=list)
+    _id: str = field(default="", metadata={"description": "Unique identifier for the server configuration"})
+    name: str = field(default="", metadata={"description": "Human-readable name for the server configuration"})
+    url: str = field(default="", metadata={"description": "ETP server URL (including protocol and port)"})
+    timeout: int = field(default=30, metadata={"description": "Connection timeout in seconds"})
+    max_web_socket_frame_payload_size: int = field(
+        default=900000, metadata={"description": "Maximum WebSocket frame payload size in bytes"}
+    )
+    max_web_socket_message_payload_size: int = field(
+        default=900000, metadata={"description": "Maximum WebSocket message payload size in bytes"}
+    )
+    verify_ssl: bool = field(default=False, metadata={"description": "Whether to verify SSL certificates"})
+    auto_reconnect: bool = field(
+        default=True, metadata={"description": "Whether to automatically reconnect on connection loss"}
+    )
+    use_transactions: bool = field(default=False, metadata={"description": "Whether to use ETP transactions"})
+    token_expires_at: float = field(default=0.0, metadata={"description": "Token expiration timestamp (epoch time)"})
+    supported_data_objects: List[str] = field(
+        default_factory=list, metadata={"description": "List of supported ETP data object types"}
+    )
+    supported_protocols: List[str] = field(
+        default_factory=list, metadata={"description": "List of supported ETP protocol versions"}
+    )
     # OSDU
-    additional_headers: Dict[str, str] = field(default_factory=dict)
-    acl_owners: List[str] = field(default_factory=list)
-    acl_viewers: List[str] = field(default_factory=list)
-    legal_tags: List[str] = field(default_factory=list)
-    data_countries: List[str] = field(default_factory=list)
+    additional_headers: Dict[str, str] = field(
+        default_factory=dict, metadata={"description": "Additional HTTP headers to include in requests"}
+    )
+    acl_owners: List[str] = field(default_factory=list, metadata={"description": "OSDU ACL owners list"})
+    acl_viewers: List[str] = field(default_factory=list, metadata={"description": "OSDU ACL viewers list"})
+    legal_tags: List[str] = field(default_factory=list, metadata={"description": "OSDU legal tags list"})
+    data_countries: List[str] = field(default_factory=list, metadata={"description": "OSDU data countries list"})
 
     def __post_init__(self):
         super().__post_init__()
@@ -442,6 +461,15 @@ class ETPConfig:
         )
 
 
+# Documentation generation functions moved to docs.py
+
+
+# Deprecated function for backward compatibility
+def _gen_serverconfig_env_vars_table():
+    """Generate a markdown table listing all environment variables for ServerConfig."""
+    return gen_serverconfig_env_vars_table()
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     servs = ServerConfigs.read_configs("configs/all_server_configs.json")
@@ -449,6 +477,8 @@ if __name__ == "__main__":
     print(azure_cfg.to_dotenv(keep_empty=True))
 
     print(ServerConfig.list_env_vars())
+
+    print(gen_all_config_env_vars_tables())
 
     # print(servs.to_json(True))
 
