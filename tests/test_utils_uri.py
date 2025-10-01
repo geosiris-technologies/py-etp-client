@@ -34,7 +34,7 @@ def test_get_valid_uri_str_with_invalid_type():
 
 
 def test_reshape_uris_as_str_list_with_str():
-    assert reshape_uris_as_str_list("foo") == ["foo"]
+    assert reshape_uris_as_str_list("foo") == ["eml:///dataspace('foo')"]
 
 
 def test_reshape_uris_as_str_list_with_etpuri():
