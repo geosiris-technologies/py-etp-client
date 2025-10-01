@@ -29,30 +29,7 @@ from etptypes.energistics.etp.v12.datatypes.message_header import (
 
 from py_etp_client.etp_requests import get_dataspaces
 from py_etp_client.utils import pe_as_str
-
-
-def start_client() -> ETPClient:
-    config = ETPConfig()
-    client = ETPClient(
-        url=config.URL,
-        spec=ETPConnection(connection_type=ConnectionType.CLIENT),
-        access_token=config.ACCESS_TOKEN,
-        username=config.USERNAME,
-        password=config.PASSWORD,
-        headers=config.ADDITIONAL_HEADERS,
-        verify=True,
-    )
-    client.start()
-
-    start_time = perf_counter()
-    while not client.is_connected() and perf_counter() - start_time < 5:
-        sleep(0.25)
-    if not client.is_connected():
-        logging.info("The ETP session could not be established in 5 seconds.")
-    else:
-        logging.info("Now connected to ETP Server")
-
-    return client
+from py_etp_client.etpclient import start_client
 
 
 def main():

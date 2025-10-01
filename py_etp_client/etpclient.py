@@ -1445,15 +1445,17 @@ class ETPClient(ETPSimpleClient):
         return False, None
 
 
-def start_client(config: ETPConfig = ETPConfig()) -> ETPClient:
+def start_client(config: Optional[Union[ServerConfig, ETPConfig]] = None, verify: Optional[bool] = None) -> ETPClient:
+    config = config or ServerConfig.from_file()
+
+    if isinstance(config, ETPConfig):
+        config = config.as_server_config()
+
+    if verify is not None:
+        config.verify_ssl = verify
     client = ETPClient(
-        url=config.URL,
         spec=ETPConnection(connection_type=ConnectionType.CLIENT),
-        access_token=config.ACCESS_TOKEN,
-        username=config.USERNAME,
-        password=config.PASSWORD,
-        headers=config.ADDITIONAL_HEADERS,
-        verify=True,
+        config=config,
     )
     client.start()
 
@@ -1462,6 +1464,7 @@ def start_client(config: ETPConfig = ETPConfig()) -> ETPClient:
         sleep(0.25)
     if not client.is_connected():
         logging.info("The ETP session could not be established in 5 seconds.")
+        raise Exception(f"Connexion not established with {config.url}")
     else:
         logging.info("Now connected to ETP Server")
 

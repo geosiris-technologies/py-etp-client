@@ -473,12 +473,12 @@ def _gen_serverconfig_env_vars_table():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     servs = ServerConfigs.read_configs("configs/all_server_configs.json")
-    azure_cfg = servs.get_by_id("azure")
-    print(azure_cfg.to_dotenv(keep_empty=True))
+    # azure_cfg = servs.get_by_id("azure")
+    # print(azure_cfg.to_dotenv(keep_empty=True))
 
-    print(ServerConfig.list_env_vars())
+    # print(ServerConfig.list_env_vars())
 
-    print(gen_all_config_env_vars_tables())
+    # print(gen_all_config_env_vars_tables())
 
     # print(servs.to_json(True))
 
@@ -493,3 +493,7 @@ if __name__ == "__main__":
     # print(ServerConfig.from_env().to_json())
 
     # print(ServerConfig._field_names_list())
+
+    for cfg in servs.all().values():
+        print("=" * 10 + " " + cfg.name)
+        print(cfg.to_dotenv(keep_empty=False))
