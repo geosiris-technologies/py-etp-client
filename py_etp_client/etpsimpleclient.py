@@ -59,8 +59,8 @@ from etptypes.energistics.etp.v12.protocol.core.request_session import (
 )
 
 from py_etp_client.etpconfig import ETPConfig, ServerConfig
-from py_etp_client.requests import default_request_session
-from py_etp_client.auth import BasicAuthConfig, TokenManager
+from py_etp_client.etp_requests import default_request_session
+from py_etp_client.auth import AuthConfig, BasicAuthConfig, TokenManager
 from py_etp_client import CloseSession
 
 # To enable handlers
@@ -118,8 +118,8 @@ class ETPSimpleClient:
 
     def __init__(
         self,
-        url: str,
-        spec: Optional[ETPConnection],
+        url: Optional[str] = None,
+        spec: Optional[ETPConnection] = None,
         access_token: Optional[str] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
@@ -127,7 +127,7 @@ class ETPSimpleClient:
         verify: Optional[Any] = None,
         max_reconnect_attempts: int = 5,
         req_session: Optional[RequestSession] = None,
-        config: Optional[Union[ETPConfig, ServerConfig]] = None,
+        config: Optional[Union[ETPConfig, ServerConfig, AuthConfig]] = None,
     ):
         """Initializes the ETPSimpleClient with the given parameters.
         This class is a simple WebSocket client for ETP (Energistics Transfer Protocol) connections.
@@ -201,7 +201,7 @@ class ETPSimpleClient:
             verify (Optional[Any], optional): SSL verification options. Defaults to None.
             max_reconnect_attempts (int, optional): Maximum number of reconnection attempts. Defaults to 5.
             req_session (Optional[RequestSession], optional): RequestSession object to use. If None provided, a default one will be created. Defaults to None.
-            config (Optional[Union[ETPConfig, ServerConfig]], optional): Configuration object for server settings. Defaults to None.
+            config (Optional[Union[ETPConfig, ServerConfig, AuthConfig]], optional): Configuration object for server settings. Defaults to None.
         """
         self.url = url
 
@@ -261,10 +261,10 @@ class ETPSimpleClient:
             else None
         )
 
-        if config is not None:
-            if isinstance(config, ETPConfig):
-                config = config.as_server_config()
+        if isinstance(config, ETPConfig):
+            config = config.as_server_config()
 
+        if config is not None and isinstance(config, ServerConfig):
             self.url = config.url or self.url
             self.verify = config.verify_ssl if self.verify is None else self.verify
             # self.max_reconnect_attempts = (
@@ -280,6 +280,9 @@ class ETPSimpleClient:
             if self.access_token is not None:
                 self.headers["Authorization"] = self.access_token
 
+        if self.url is None:
+            raise ValueError("WebSocket URL must be provided either directly or via config")
+
         if not self.url.startswith("ws"):
             if self.url.lower().startswith("http"):
                 self.url = "ws" + self.url[4:]
@@ -294,20 +297,28 @@ class ETPSimpleClient:
         if isinstance(self.verify, bool) and not self.verify:
             self.sslopt = {"cert_reqs": ssl.CERT_NONE}
 
-    def _init_connection(self, config: Optional[ServerConfig] = None) -> None:
+    def _init_connection(self, config: Optional[Union[ServerConfig, AuthConfig]] = None) -> None:
         if self.spec is None:
             self.spec = ETPConnection(connection_type=ConnectionType.CLIENT)
             if self.client_info is not None:
                 self.spec.client_info = self.client_info
 
-        if config is not None and config.max_web_socket_frame_payload_size is not None:
+        if (
+            config is not None
+            and isinstance(config, ServerConfig)
+            and config.max_web_socket_frame_payload_size is not None
+        ):
             self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = (
                 config.max_web_socket_frame_payload_size
             )
         elif "MaxWebSocketFramePayloadSize" not in self.spec.client_info.endpoint_capabilities:
             self.spec.client_info.endpoint_capabilities["MaxWebSocketFramePayloadSize"] = 900000
 
-        if config is not None and config.max_web_socket_message_payload_size is not None:
+        if (
+            config is not None
+            and isinstance(config, ServerConfig)
+            and config.max_web_socket_message_payload_size is not None
+        ):
             self.spec.client_info.endpoint_capabilities["MaxWebSocketMessagePayloadSize"] = (
                 config.max_web_socket_message_payload_size
             )

@@ -1,16 +1,19 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import base64
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, Field
 from enum import Enum
 from abc import ABC
 import logging
-from typing import Optional, Dict, Any
+import os
+import re
+from typing import Optional, Dict, Any, get_origin
 from datetime import datetime
 import requests
 import json
 import time
 from energyml.utils.constants import snake_case
+from energyml.utils.introspection import is_primitive, is_enum
 
 
 from base64 import b64encode
@@ -98,6 +101,25 @@ class AuthMethod(Enum):
     GCP_OAUTH = "gcp_oauth"
     BEARER_TOKEN = "bearer_token"
 
+    def __new__(cls, value):
+        obj = object.__new__(cls)
+        obj._value_ = value
+        return obj
+
+    @classmethod
+    def _missing_(cls, value):
+        """Handle missing values by trying to match with flexible names."""
+        if isinstance(value, str):
+            value_lower = value.lower()
+            for member in cls:
+                if (
+                    member.value == value
+                    or member.name.lower() == value_lower
+                    or member.name.lower().startswith(value_lower)
+                ):
+                    return member
+        return None
+
 
 class JsonSerializable:
     def to_dict(self) -> dict:
@@ -121,15 +143,149 @@ class JsonSerializable:
         return cls(**{k: v for k, v in d.items() if k in valid_keys})
 
 
-class AuthConfig(JsonSerializable, ABC):
-    cached_token: str = ""
-    token_expires_at: float = 0.0  # Epoch time
+@dataclass
+class EnvironmentSettable:
+    @classmethod
+    def from_env(cls):
+        """Load configuration from environment variables if set."""
+        instance = cls()
+
+        for field_name in cls._field_names_list():
+            env_var = f"{cls._env_var_prefix()}{field_name.upper()}"
+            if env_var in os.environ:
+                attr_type = cls.__dataclass_fields__[field_name].type
+                if attr_type == bool:
+                    setattr(instance, field_name, os.environ[env_var].lower() in ("1", "true", "yes", "on"))
+                elif is_primitive(attr_type):
+                    setattr(instance, field_name, attr_type(os.environ[env_var]))
+                else:
+                    setattr(instance, field_name, json.loads(os.environ[env_var]))
+
+        for f_set in cls._field_settable():
+            assert f_set.type and hasattr(f_set.type, "from_env")
+            setattr(instance, f_set.name, f_set.type.from_env())
+
+        return instance
+
+    @classmethod
+    def list_env_vars(cls):
+        """List relevant environment variables for this config."""
+
+        res = [cls._field_to_env_var(field_name=field_name) for field_name in cls._field_names_list()]
+        for f_set in cls._field_settable():
+            res.extend(f_set.type.list_env_vars())
+        return res
+
+    @classmethod
+    def _field_names_list(cls):
+        # only for str, int, float, bool or enum types. List and dict are included but will be set as json str in env
+        return [
+            field_name
+            for field_name in cls.__dataclass_fields__.keys()
+            if is_primitive(cls.__dataclass_fields__[field_name].type)
+            or cls._is_list_or_dict_type(cls.__dataclass_fields__[field_name].type)
+        ]
+
+    @classmethod
+    def _is_list_or_dict_type(cls, field_type):
+        """Check if a field type is list, dict, or their typing equivalents (List[T], Dict[K, V], etc.)"""
+        # Check for basic list/dict types
+        if field_type in [list, dict]:
+            return True
+
+        # Check for typing annotations like List[str], Dict[str, int], etc.
+        origin = get_origin(field_type)
+        if origin in [list, dict]:
+            return True
+
+        return False
+
+    @classmethod
+    def _field_settable(cls) -> list[Field]:
+        settable_fields = []
+        for field_name in cls.__dataclass_fields__.keys():
+            field_type = cls.__dataclass_fields__[field_name].type
+            if hasattr(field_type, "__mro__") and EnvironmentSettable in field_type.__mro__:
+                settable_fields.append(cls.__dataclass_fields__[field_name])
+        return settable_fields
+
+    @classmethod
+    def _env_var_prefix(cls) -> str:
+        # removing Config or AuthConfig suffixes from class name
+        return re.sub(r"(Config|AuthConfig)$", "", cls.__name__).upper() + "_"
+        # return snake_case(cls.__name__).replace("_auth_config", "").upper().replace("config", "").upper() + "_"
+
+    @classmethod
+    def _field_to_env_var(cls, field_name: str) -> str:
+        return f"{cls._env_var_prefix()}{field_name.upper()}"
+
+    def to_dotenv(self, keep_empty: bool = False) -> str:
+        """Convert the dataclass to a dotenv formatted string."""
+        lines = []
+        for field_name in self._field_names_list():
+            value = getattr(self, field_name)
+            if value is not None and (keep_empty or value != ""):
+                if is_enum(type(value)):
+                    value = value.value
+                lines.append(
+                    f"{self._field_to_env_var(field_name)}={value if is_primitive(type(value)) else json.dumps(value)}"
+                )
+        for f_set in self._field_settable():
+            nested_instance = getattr(self, f_set.name)
+            if nested_instance is not None and hasattr(nested_instance, "to_dotenv"):
+                lines.append(nested_instance.to_dotenv(keep_empty=keep_empty))
+        return "\n".join(lines)
+
+
+@dataclass
+class AuthConfig(JsonSerializable, ABC, EnvironmentSettable):
+    cached_token: str = field(default="", metadata={"description": "Cached authentication token"})
+    token_expires_at: float = field(default=0.0, metadata={"description": "Token expiration time (epoch time)"})
+
+    # @classmethod
+    # def from_env(cls):
+    #     """Load configuration from environment variables if set."""
+    #     for field_name in cls.__dataclass_fields__:
+    #         env_var = f"{cls._env_var_prefix()}{field_name.upper()}"
+    #         if env_var in os.environ:
+    #             setattr(cls, field_name, os.environ[env_var])
+
+    #     # also add parent class fields
+    #     for field_name in AuthConfig.__dataclass_fields__:
+    #         env_var = f"{AuthConfig._env_var_prefix()}{field_name.upper()}"
+    #         if env_var in os.environ:
+    #             setattr(cls, field_name, os.environ[env_var])
+
+    # @classmethod
+    # def list_env_vars(cls):
+    #     """List relevant environment variables for this config."""
+    #     fields = cls.__dataclass_fields__
+    #     if len(fields) != len(AuthConfig.__dataclass_fields__):
+    #         # remove keys from parent class
+    #         parent_fields = AuthConfig.__dataclass_fields__
+    #         fields = [f for f in fields if f not in parent_fields]
+    #     return [cls._field_to_env_var(field_name=field_name) for field_name in fields]
+
+    # @classmethod
+    # def _env_var_prefix(cls) -> str:
+    #     # removing Config or AuthConfig suffixes from class name
+    #     return re.sub(r"(Config|AuthConfig)$", "", cls.__name__).upper() + "_"
+    #     # return snake_case(cls.__name__).replace("_auth_config", "").upper().replace("config", "").upper() + "_"
+
+    # @classmethod
+    # def _field_to_env_var(cls, field_name: str) -> str:
+    #     return f"{cls._env_var_prefix()}{field_name.upper()}"
 
 
 @dataclass
 class BasicAuthConfig(AuthConfig):
-    username: str = ""
-    password: str = ""
+    """
+    Configuration for HTTP Basic Authentication.
+    Stores username and password for basic auth scenarios.
+    """
+
+    username: str = field(default="", metadata={"description": "Username for basic authentication"})
+    password: str = field(default="", metadata={"description": "Password for basic authentication"})
 
     def to_dict(self) -> dict:
         return {
@@ -140,9 +296,15 @@ class BasicAuthConfig(AuthConfig):
 
 @dataclass
 class OAuth2Config(AuthConfig):
-    client_id: str = ""
-    client_secret: str = ""
-    refresh_token: str = ""
+    """
+    Configuration for OAuth2 authentication.
+    Stores client credentials and optional refresh token, token URL, and scope.
+    Used for generic OAuth2 flows.
+    """
+
+    client_id: str = field(default="", metadata={"description": "OAuth2 client ID"})
+    client_secret: str = field(default="", metadata={"description": "OAuth2 client secret"})
+    refresh_token: str = field(default="", metadata={"description": "OAuth2 refresh token (optional)"})
 
     def to_dict(self) -> dict:
         return {
@@ -150,16 +312,21 @@ class OAuth2Config(AuthConfig):
             "client_secret": self.client_secret,
         }
 
-    token_url: str = ""
-    scope: str = ""
+    token_url: str = field(default="", metadata={"description": "OAuth2 token endpoint URL"})
+    scope: str = field(default="", metadata={"description": "OAuth2 scopes (space-separated)"})
 
 
 @dataclass
 class AzureADConfig(AuthConfig):
-    tenant_id: str = ""
-    client_id: str = ""
-    client_secret: str = ""
-    scope: str = ""
+    """
+    Configuration for Azure Active Directory authentication.
+    Stores tenant ID, client credentials, and scope for Azure AD OAuth2 flows.
+    """
+
+    tenant_id: str = field(default="", metadata={"description": "Azure AD tenant ID"})
+    client_id: str = field(default="", metadata={"description": "Azure AD application (client) ID"})
+    client_secret: str = field(default="", metadata={"description": "Azure AD client secret"})
+    scope: str = field(default="", metadata={"description": "Azure AD scopes (space-separated)"})
 
     def to_dict(self) -> dict:
         return {
@@ -172,13 +339,18 @@ class AzureADConfig(AuthConfig):
 
 @dataclass
 class AWSCognitoConfig(AuthConfig):
-    user_pool_id: str = ""
-    app_client_id: str = ""
-    client_secret: str = ""
-    aws_region: str = ""
-    username: str = ""
-    password: str = ""
-    refresh_token: str = ""
+    """
+    Configuration for AWS Cognito authentication.
+    Stores user pool, app client, region, and user credentials for AWS Cognito flows.
+    """
+
+    user_pool_id: str = field(default="", metadata={"description": "AWS Cognito user pool ID"})
+    app_client_id: str = field(default="", metadata={"description": "AWS Cognito app client ID"})
+    client_secret: str = field(default="", metadata={"description": "AWS Cognito app client secret"})
+    aws_region: str = field(default="", metadata={"description": "AWS region for Cognito"})
+    username: str = field(default="", metadata={"description": "Cognito username"})
+    password: str = field(default="", metadata={"description": "Cognito password"})
+    refresh_token: str = field(default="", metadata={"description": "Cognito refresh token (optional)"})
 
     def to_dict(self) -> dict:
         return {
@@ -193,9 +365,16 @@ class AWSCognitoConfig(AuthConfig):
 
 @dataclass
 class GCPOAuthConfig(AuthConfig):
-    gcp_project_id: str = ""
-    service_account_key: str = ""
-    scope: str = ""
+    """
+    Configuration for Google Cloud Platform OAuth authentication.
+    Stores project ID, service account key, and scope for GCP OAuth2 flows.
+    """
+
+    gcp_project_id: str = field(default="", metadata={"description": "GCP project ID"})
+    service_account_key: str = field(
+        default="", metadata={"description": "GCP service account key (JSON string or file path)"}
+    )
+    scope: str = field(default="", metadata={"description": "GCP OAuth2 scopes (space-separated)"})
 
     def to_dict(self) -> dict:
         return {
@@ -207,6 +386,10 @@ class GCPOAuthConfig(AuthConfig):
 
 @dataclass
 class BearerTokenConfig(AuthConfig):
+    """
+    Configuration for Bearer Token authentication.
+    Used when a static or pre-fetched bearer token is provided directly.
+    """
 
     def to_dict(self) -> dict:
         return {
@@ -215,7 +398,7 @@ class BearerTokenConfig(AuthConfig):
 
 
 @dataclass
-class AuthConfigs(JsonSerializable):
+class AuthConfigs(JsonSerializable, EnvironmentSettable):
     auth_method: AuthMethod = AuthMethod.BASIC
     basic: BasicAuthConfig = field(default_factory=BasicAuthConfig)
     oauth2: OAuth2Config = field(default_factory=OAuth2Config)
@@ -264,7 +447,7 @@ class AuthConfigs(JsonSerializable):
 
     def to_dict(self) -> dict:
         return {
-            "auth_method": self.auth_method.value,
+            "auth_method": self.auth_method.value if self.auth_method is not None else None,
             "basic": self.basic.to_dict() if self.basic is not None else None,
             "oauth2": self.oauth2.to_dict() if self.oauth2 is not None else None,
             "azure_ad": self.azure_ad.to_dict() if self.azure_ad is not None else None,
@@ -608,3 +791,48 @@ class TokenManager:
 
         except Exception as e:
             return False, f"Authentication test failed: {str(e)}"
+
+
+def _gen_markdown_table_for_env_variables(a_class: type = AuthConfig) -> str:
+    """Generate a markdown table listing all environment variables for all AuthConfig subclasses."""
+
+    lines = []
+    lines.append("| Class | Environment Variable | Description |")
+    lines.append("|-------|----------------------|-------------|")
+
+    for cls in a_class.__subclasses__():
+        for field_name, field_obj in cls.__dataclass_fields__.items():
+            # Skip parent class fields that are common to all (except for BearerTokenConfig where cached_token is relevant)
+            if field_name in ["cached_token", "token_expires_at"] and cls.__name__ != "BearerTokenConfig":
+                continue
+
+            env_var = f"{cls._env_var_prefix()}{field_name.upper()}"
+
+            # Get description from field metadata
+            description = field_obj.metadata.get("description", f"Configuration field for {field_name}")
+
+            lines.append(f"| {cls.__name__} | `{env_var}` | {description} |")
+
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    import dotenv
+
+    dotenv.load_dotenv(".env")
+    logging.basicConfig(level=logging.DEBUG)
+    # Example usage
+
+    # print(_gen_markdown_table_for_env_variables(AuthConfig))
+    from py_etp_client.etpconfig import ServerConfig
+
+    print(_gen_markdown_table_for_env_variables(ServerConfig))
+    # print(AuthConfigs.list_env_vars())
+    # print(AuthConfigs._field_settable())
+
+    # print(AuthConfigs.from_env().to_json())
+
+    # print(AuthConfigs.list_env_vars())
+
+    # print(AuthMethod("azure_ad"))
+    # print(AuthMethod("azure"))

@@ -27,7 +27,7 @@ from etptypes.energistics.etp.v12.datatypes.message_header import (
     MessageHeader,
 )
 
-from py_etp_client.requests import get_dataspaces
+from py_etp_client.etp_requests import get_dataspaces
 from py_etp_client.utils import pe_as_str
 
 

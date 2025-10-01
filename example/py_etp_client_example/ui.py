@@ -14,7 +14,7 @@ from py_etp_client.auth import BasicAuthConfig, TokenManager
 from py_etp_client.etpclient import ETPClient
 from py_etp_client.etpconfig import ETPConfig, ServerConfig
 from py_etp_client import ProtocolException, AuthorizeResponse
-from py_etp_client.requests import get_property_kind_and_parents, read_energyml_obj
+from py_etp_client.etp_requests import get_property_kind_and_parents, read_energyml_obj
 from etpproto.connection import ConnectionType
 from etpproto.connection import (
     ETPConnection,
@@ -31,7 +31,7 @@ from energyml.utils.constants import path_last_attribute, RGX_UUID_NO_GRP
 # import energyml.resqml.v2_2.resqmlv2 as r22
 # import energyml.resqml.v2_0_1.resqmlv2 as r201
 
-from py_etp_client.requests import get_dataspaces
+from py_etp_client.etp_requests import get_dataspaces
 from py_etp_client.utils import __H5PY_MODULE_EXISTS__, pe_as_str
 
 if __H5PY_MODULE_EXISTS__:

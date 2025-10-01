@@ -28,7 +28,7 @@ from py_etp_client import (
     Uuid,
 )
 from py_etp_client.etpconfig import ETPConfig
-from py_etp_client.requests import _create_resource, read_energyml_obj
+from py_etp_client.etp_requests import _create_resource, read_energyml_obj
 
 
 @dataclass

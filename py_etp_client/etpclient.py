@@ -49,8 +49,9 @@ import numpy as np
 from energyml.utils.uri import Uri as ETPUri
 from energyml.utils.epc import Epc
 from energyml.utils.constants import epoch
+from py_etp_client.auth import AuthConfig
 from py_etp_client.etpconfig import ETPConfig, ServerConfig
-from py_etp_client.requests import get_any_array_type, get_any_array_type_size, read_energyml_obj
+from py_etp_client.etp_requests import get_any_array_type, get_any_array_type_size, read_energyml_obj
 
 
 from py_etp_client.etpsimpleclient import ETPSimpleClient
@@ -58,7 +59,7 @@ from py_etp_client import RequestSession, GetDataObjects
 from etpproto.connection import ETPConnection, ConnectionType
 
 
-from py_etp_client.requests import (
+from py_etp_client.etp_requests import (
     create_data_object,
     get_any_array,
     get_dataspaces,
@@ -224,7 +225,7 @@ class ETPClient(ETPSimpleClient):
         headers: Optional[Union[dict, str]] = None,
         verify: Optional[Any] = None,
         req_session: Optional[RequestSession] = None,
-        config: Optional[Union[ETPConfig, ServerConfig]] = None,
+        config: Optional[Union[ETPConfig, ServerConfig, AuthConfig]] = None,
     ):
         """
         Initialize the ETPClient with connection parameters.

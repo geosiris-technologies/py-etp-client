@@ -11,7 +11,7 @@ import json
 import yaml
 
 from energyml.utils.epc import gen_uuid
-from py_etp_client.auth import AuthConfigs, AuthMethod, JsonSerializable
+from py_etp_client.auth import AuthConfigs, AuthMethod, EnvironmentSettable, JsonSerializable
 
 from energyml.utils.constants import snake_case
 from typing import Optional
@@ -25,7 +25,7 @@ ETP_CONFIGS_DEFAULT_PATH = "configs/all_server_configs.json"
 
 
 @dataclass
-class ServerConfig(AuthConfigs):
+class ServerConfig(AuthConfigs, EnvironmentSettable):
     @classmethod
     def from_dict(cls, d: dict) -> "ServerConfig":
         # Remove 'include' if present
@@ -445,12 +445,21 @@ class ETPConfig:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     servs = ServerConfigs.read_configs("configs/all_server_configs.json")
-    print(servs.to_json(True))
+    azure_cfg = servs.get_by_id("azure")
+    print(azure_cfg.to_dotenv(keep_empty=True))
 
-    # Test ETPConfig loading from .env and YAML
-    config = ETPConfig()
-    print(config)
-    print(config.as_server_config().to_json())
+    print(ServerConfig.list_env_vars())
 
-    print("=" * 40)
-    print(servs.get_by_id("azure").to_json())
+    # print(servs.to_json(True))
+
+    # # Test ETPConfig loading from .env and YAML
+    # config = ETPConfig()
+    # print(config)
+    # print(config.as_server_config().to_json())
+
+    # print("=" * 40)
+    # print(servs.get_by_id("azure").to_json())
+
+    # print(ServerConfig.from_env().to_json())
+
+    # print(ServerConfig._field_names_list())
