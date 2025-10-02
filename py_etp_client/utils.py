@@ -46,12 +46,13 @@ except Exception:
     def h5_list_datasets(h5_file_path) -> List[str]:  # type: ignore
         raise ImportError("h5py module is not available.")
 
-# test if python >= 3.12
-if __import__("sys").version_info >= (3, 12):
-    type T_UriSingleOrGrouped = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
-else:
-    # Type alias for URI inputs that can be single values or grouped collections
-    T_UriSingleOrGrouped: TypeAlias = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
+
+# # test if python >= 3.12
+# if __import__("sys").version_info >= (3, 12):
+#     type T_UriSingleOrGrouped = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
+# else:
+# Type alias for URI inputs that can be single values or grouped collections
+T_UriSingleOrGrouped: TypeAlias = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
 
 
 def get_valid_uri_str(uri: Optional[Union[str, ETPUri]]) -> str:
