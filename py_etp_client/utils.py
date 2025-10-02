@@ -3,11 +3,23 @@
 
 __H5PY_MODULE_EXISTS__ = False
 from typing import Dict, List, Optional, Union
+
+try:
+    from typing import TypeAlias  # Python 3.10+
+except ImportError:
+    try:
+        from typing_extensions import TypeAlias  # For older Python versions
+    except ImportError:
+        # Fallback for environments without typing_extensions
+        # This is just for type checkers, runtime behavior is unchanged
+        TypeAlias = type(None)  # type: ignore
+
 from energyml.utils.uri import Uri as ETPUri
 from py_etp_client import ProtocolException
 
 try:
     import h5py
+
     __H5PY_MODULE_EXISTS__ = True
 
     def h5_list_datasets(h5_file_path) -> List[str]:  # type: ignore
@@ -34,8 +46,12 @@ except Exception:
     def h5_list_datasets(h5_file_path) -> List[str]:  # type: ignore
         raise ImportError("h5py module is not available.")
 
-
-type T_UriSingleOrGrouped = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
+# test if python >= 3.12
+if __import__("sys").version_info >= (3, 12):
+    type T_UriSingleOrGrouped = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
+else:
+    # Type alias for URI inputs that can be single values or grouped collections
+    T_UriSingleOrGrouped: TypeAlias = Union[str, ETPUri, List[str], List[ETPUri], Dict[str, str], Dict[str, ETPUri]]
 
 
 def get_valid_uri_str(uri: Optional[Union[str, ETPUri]]) -> str:
