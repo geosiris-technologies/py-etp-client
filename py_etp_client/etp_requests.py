@@ -1,7 +1,8 @@
 # Copyright (c) 2022-2023 Geosiris.
 # SPDX-License-Identifier: Apache-2.0
 import logging
-from typing import Any, List, Union, AsyncGenerator, Optional
+import traceback
+from typing import Any, Dict, List, Type, Union, AsyncGenerator, Optional
 import uuid as pyUUID
 
 from etpproto.error import NotSupportedError
@@ -21,6 +22,7 @@ import numpy as np
 
 from py_etp_client import (
     Acknowledge,
+    AnyArrayType,
     ActiveStatusKind,
     AnyArray,
     ArrayOfBoolean,
@@ -91,6 +93,7 @@ from energyml.utils.introspection import (
     get_object_attribute,
     search_attribute_matching_type,
 )
+from energyml.utils.epc import get_property_kind_by_uuid
 from energyml.utils.uri import parse_uri
 from energyml.utils.serialization import (
     read_energyml_xml_str,
@@ -99,7 +102,30 @@ from energyml.utils.serialization import (
     serialize_xml,
     read_energyml_xml_bytes,
     read_energyml_json_bytes,
+    JSON_VERSION,
 )
+
+from py_etp_client.utils import (
+    T_UriSingleOrGrouped,
+    get_valid_uri_str,
+    reshape_uris_as_str_dict,
+    reshape_uris_as_str_list,
+)
+
+
+def read_energyml_obj(data: Union[str, bytes], format_: str) -> Any:
+    if isinstance(data, str):
+        if format_ == "xml":
+            return read_energyml_xml_str(data)
+        elif format_ == "json":
+            return read_energyml_json_str(data)
+    elif isinstance(data, bytes):
+        if format_ == "xml":
+            return read_energyml_xml_bytes(data)
+        elif format_ == "json":
+            return read_energyml_json_bytes(data, json_version=JSON_VERSION.OSDU_OFFICIAL)
+    else:
+        raise ValueError("data must be a string or bytes")
 
 
 def get_scope(scope: str):
@@ -131,7 +157,7 @@ def default_request_session():
     rq = RequestSession(
         applicationName="Geosiris etp client",
         applicationVersion="0.1.0",
-        clientInstanceId=gen_uuid(),
+        clientInstanceId=gen_uuid(),  # type: ignore
         requestedProtocols=list(
             filter(
                 lambda sp: sp.protocol != 0,
@@ -147,12 +173,12 @@ def default_request_session():
                 ],
             )
         ),  # ETPConnection.server_capabilities.supported_protocols
-        supportedDataObjects=ETPConnection.server_capabilities.supported_data_objects,
-        supportedCompression=ETPConnection.server_capabilities.supported_compression,
-        supportedFormats=ETPConnection.server_capabilities.supported_formats,
+        supportedDataObjects=ETPConnection.server_capabilities.supported_data_objects,  # type: ignore
+        supportedCompression=ETPConnection.server_capabilities.supported_compression,  # type: ignore
+        supportedFormats=ETPConnection.server_capabilities.supported_formats,  # type: ignore
         currentDateTime=epoch(),
         endpointCapabilities={},
-        earliest_retained_change_time=0,
+        earliestRetainedChangeTime=0,
     )
     return rq
 
@@ -166,41 +192,38 @@ def default_request_session():
 
 
 def get_resources(
-    uri: str = "eml:///",
+    uri: Optional[str] = "eml:///",
     depth: int = 1,
-    scope=None,
+    scope: str = "self",
     data_object_types: Optional[List[str]] = None,
+    include_edges: bool = False,
 ):
-    if uri is not None:
-        if not uri.startswith("eml:///"):
-            uri = f"eml:///dataspace('{uri}')"
-    else:
-        uri = "eml:///"
+    uri = get_valid_uri_str(uri)
     return GetResources(
         context=ContextInfo(
             uri=uri,
             depth=depth,
-            dataObjectTypes=data_object_types or [],
+            dataObjectTypes=data_object_types or [],  # type: ignore
             navigableEdges=RelationshipKind.PRIMARY,
         ),
         scope=get_scope(scope),
         countObjects=False,
         storeLastWriteFilter=None,
         activeStatusFilter=ActiveStatusKind.INACTIVE,
-        includeEdges=False,
+        includeEdges=include_edges,
     )
 
 
 def get_deleted_resources(
     dataspace: str,
-    delete_time_filter: int = None,
+    delete_time_filter: Optional[int] = None,
     data_object_types: list = [],
 ):
-    ds_uri = "eml:///dataspace('" + dataspace + "')" if "eml:///" not in dataspace else dataspace
+    ds_uri = get_valid_uri_str(dataspace)
     return GetDeletedResources(
-        dataspace_uri=ds_uri,
-        delete_time_filter=delete_time_filter,
-        data_object_types=data_object_types,
+        dataspaceUri=ds_uri,
+        deleteTimeFilter=delete_time_filter,  # type: ignore
+        dataObjectTypes=data_object_types,
     )
 
 
@@ -213,12 +236,23 @@ def get_deleted_resources(
 
 
 def get_dataspaces():
-    return GetDataspaces()
+    return GetDataspaces(storeLastWriteFilter=None)
 
 
-def put_dataspace(dataspace_names: list, custom_data: dict = None):
+def put_dataspace(dataspace_names: T_UriSingleOrGrouped, custom_data: Optional[dict] = None) -> PutDataspaces:
+    """Create or update dataspace(s).
+
+    Args:
+        dataspace_names (T_UriSingleOrGrouped): The name(s) of the dataspace(s) to create or update.
+        custom_data (Optional[dict], optional): Custom data to include in the request. Defaults to None.
+
+    Returns:
+        PutDataspaces: The PutDataspaces request object.
+    """
     ds_map = {}
     now = epoch()
+
+    dataspace_names = reshape_uris_as_str_dict(dataspace_names)
 
     custom_data_reshaped = None
     if custom_data is not None:
@@ -229,23 +263,21 @@ def put_dataspace(dataspace_names: list, custom_data: dict = None):
             else:
                 custom_data_reshaped[key] = DataValue(item=value)
 
-    for ds_name in dataspace_names:
-        ds_map[str(len(ds_map))] = Dataspace(
-            uri=("eml:///dataspace('" + ds_name + "')" if "eml:///" not in ds_name else ds_name),
-            store_last_write=now,
-            store_created=now,
-            path=ds_name,
-            custom_data=custom_data_reshaped or {},
+    for k, ds_uri in dataspace_names.items():
+        ds_uri_etp = parse_uri(ds_uri)
+        ds_map[k] = Dataspace(
+            uri=ds_uri,
+            storeLastWrite=now,
+            storeCreated=now,
+            path=ds_uri_etp.dataspace or "",
+            customData=custom_data_reshaped or {},
         )
 
+    print(f"custom_data_reshaped: {custom_data_reshaped}")
+
+    print(PutDataspaces(dataspaces=ds_map).json())
+
     return PutDataspaces(dataspaces=ds_map)
-
-
-def delete_dataspace(dataspace_names: list):
-    ds_map = {}
-    for ds_name in dataspace_names:
-        ds_map[str(len(ds_map))] = "eml:///dataspace('" + ds_name + "')" if "eml:///" not in ds_name else ds_name
-    return DeleteDataspaces(uris=ds_map)
 
 
 #    _____ __
@@ -255,17 +287,15 @@ def delete_dataspace(dataspace_names: list):
 # /____/\__/\____/_/   \___/
 
 
-def delete_data_object(uris: list):
+def delete_data_object(uris: T_UriSingleOrGrouped):
     return DeleteDataObjects(
-        uris={i: uris[i] for i in range(len(uris))},
-        prune_contained_objects=False,
+        uris=reshape_uris_as_str_dict(uris),
+        pruneContainedObjects=False,
     )
 
 
-def _create_resource(obj: Any, dataspace_name: str = None) -> Resource:
-    ds_name = dataspace_name
-    if "eml:///" in ds_name:
-        ds_name = parse_uri(ds_name).dataspace
+def _create_resource(obj: Any, dataspace_name: Optional[str] = None) -> Resource:
+    ds_name = parse_uri(get_valid_uri_str(dataspace_name)).dataspace if dataspace_name is not None else None
 
     uri = str(get_obj_uri(obj, ds_name))
 
@@ -282,46 +312,65 @@ def _create_resource(obj: Any, dataspace_name: str = None) -> Resource:
     return Resource(
         uri=uri,
         name=get_object_attribute(obj, "Citation.Title"),
-        source_count=0,
-        target_count=nb_ref,
-        last_changed=last_changed,
-        store_last_write=date,
-        store_created=date,
-        active_status=ActiveStatusKind.ACTIVE,
-        alternate_uris=[],
-        custom_data={},
+        sourceCount=0,  # type: ignore
+        targetCount=nb_ref,  # type: ignore
+        lastChanged=last_changed,
+        storeLastWrite=date,
+        storeCreated=date,
+        activeStatus=ActiveStatusKind.ACTIVE,
+        alternateUris=[],
+        customData={},
     )
 
 
-def _create_data_object(
-    obj: Optional[Any] = None, obj_as_str: Optional[str] = None, format="xml", dataspace_name: str = None
+def create_data_object(
+    obj: Optional[Any] = None, obj_as_str: Optional[str] = None, format="xml", dataspace_name: Optional[str] = None
 ):
     if obj is None and obj_as_str is None:
         raise ValueError("Either obj or obj_as_str must be provided")
-    if obj is None:
-        try:
-            if isinstance(obj_as_str, bytes):
-                obj = read_energyml_xml_bytes(obj_as_str)
-            else:
-                obj = read_energyml_xml_str(obj_as_str)
-        except:
-            if isinstance(obj_as_str, bytes):
-                obj = read_energyml_json_bytes(obj_as_str)
-            else:
-                obj = read_energyml_json_str(obj_as_str)[0]
-            format = "json"
+    elif obj is None and obj_as_str is not None:
+        obj = read_energyml_obj(obj_as_str, format_=format)
     elif obj_as_str is None:
         if format == "json":
             obj_as_str = serialize_json(obj)
         else:
             obj_as_str = serialize_xml(obj)
-
+    if isinstance(obj, list):  # in case of json parsing
+        if len(obj) == 0:
+            raise ValueError("obj cannot be an empty list")
+        obj = obj[0]
+    print(get_obj_uuid(obj))
     return DataObject(
-        data=obj_as_str,
-        blobId=pyUUID.UUID(get_obj_uuid(obj)).hex,
+        data=obj_as_str.encode("utf-8") if isinstance(obj_as_str, str) else obj_as_str,
+        blobId=pyUUID.UUID(get_obj_uuid(obj)).hex,  # type: ignore
         resource=_create_resource(obj=obj, dataspace_name=dataspace_name),
         format=format,
     )
+
+
+def get_property_kind_and_parents(uuids: list) -> Dict[str, Any]:
+    """Get PropertyKind objects and their parents from a list of UUIDs.
+
+    Args:
+        uuids (list): List of PropertyKind UUIDs.
+
+    Returns:
+        Dict[str, Any]: A dictionary mapping UUIDs to PropertyKind objects and their parents.
+    """
+    dict_props: Dict[str, Any] = {}
+
+    for prop_uuid in uuids:
+        prop = get_property_kind_by_uuid(prop_uuid)
+        if prop is not None:
+            dict_props[prop_uuid] = prop
+            parent_uuid = get_object_attribute(prop, "parent.uuid")
+            if parent_uuid is not None and parent_uuid not in dict_props:
+                print(f"Adding parent {parent_uuid} for property {prop_uuid}")
+                dict_props = get_property_kind_and_parents([parent_uuid]) | dict_props
+        else:
+            logging.warning(f"PropertyKind with UUID {prop_uuid} not found.")
+            continue
+    return dict_props
 
 
 #     ___
@@ -334,9 +383,9 @@ def _create_data_object(
 
 def get_array_class_from_dtype(
     dtype: str,
-) -> Union[ArrayOfInt, ArrayOfLong, ArrayOfBoolean, ArrayOfFloat, ArrayOfDouble, ArrayOfBytes, ArrayOfString]:
+) -> Type[Union[ArrayOfInt, ArrayOfLong, ArrayOfBoolean, ArrayOfFloat, ArrayOfDouble, ArrayOfBytes, ArrayOfString]]:
     dtype_str = str(dtype)
-    print("dtype_str", dtype_str)
+    # print("dtype_str", dtype_str)
     if dtype_str.startswith("long") or dtype_str.startswith("int64"):
         return ArrayOfLong
     elif dtype_str.startswith("int") or dtype_str.startswith("unsign") or dtype_str.startswith("uint"):
@@ -352,6 +401,42 @@ def get_array_class_from_dtype(
     elif dtype_str.startswith("str") or dtype_str.startswith("<U"):
         return ArrayOfString
     return ArrayOfFloat
+
+
+def get_any_array_type(
+    dtype: str,
+) -> AnyArrayType:
+    dtype_str = str(dtype)
+    # print("dtype_str", dtype_str)
+    if dtype_str.startswith("long") or dtype_str.startswith("int64"):
+        return AnyArrayType.ARRAY_OF_LONG
+    elif dtype_str.startswith("int") or dtype_str.startswith("unsign") or dtype_str.startswith("uint"):
+        return AnyArrayType.ARRAY_OF_INT
+    elif dtype_str.startswith("bool"):
+        return AnyArrayType.ARRAY_OF_BOOLEAN
+    elif dtype_str.startswith("double") or dtype_str.startswith("float64"):
+        return AnyArrayType.ARRAY_OF_DOUBLE
+    elif dtype_str.startswith("float"):
+        return AnyArrayType.ARRAY_OF_FLOAT
+    elif dtype_str.startswith("bytes") or dtype_str.startswith("|S"):
+        return AnyArrayType.BYTES
+    elif dtype_str.startswith("str") or dtype_str.startswith("<U"):
+        return AnyArrayType.ARRAY_OF_STRING
+    return AnyArrayType.ARRAY_OF_FLOAT
+
+
+def get_any_array_type_size(
+    dtype: AnyArrayType,
+) -> int:
+    if dtype == AnyArrayType.ARRAY_OF_LONG or dtype == AnyArrayType.ARRAY_OF_DOUBLE:
+        return 8
+    elif dtype == AnyArrayType.ARRAY_OF_INT or dtype == AnyArrayType.ARRAY_OF_FLOAT:
+        return 4
+    elif (
+        dtype == AnyArrayType.ARRAY_OF_BOOLEAN or dtype == AnyArrayType.BYTES or dtype == AnyArrayType.ARRAY_OF_STRING
+    ):
+        return 1
+    return 4
 
 
 def get_any_array(
@@ -371,15 +456,7 @@ def get_any_array(
     array = array.flatten()
     # logging.debug("\t@get_any_array: type array : %s", type(array.tolist()))
     # logging.debug("\t@get_any_array: type inside : %s", type(array.tolist()[0]))
-    return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))
-
-
-if __name__ == "__main__":
-    print(get_any_array([1, 2, 3, 4, 5]))
-    print(get_any_array(np.array([[1.52, 2, 3], [4, 5, 6]])))
-    print(get_any_array(np.array([["1.52", "2", "3"], ["4", "5", "6"]])))
-    print(get_any_array(np.array([True, False, True])))
-    # print(get_any_array(np.array([b"hello", b"world"])))
+    return AnyArray(item=get_array_class_from_dtype(str(array.dtype))(values=array.tolist()))  # type: ignore
 
 
 #    _____                              __           __   __
@@ -396,8 +473,7 @@ def get_supported_types(
     return_empty_types: bool = True,
     scope: str = "self",
 ):
-    if not uri.startswith("eml:///"):
-        uri = f"eml:///dataspace('{uri}')"
+    uri = get_valid_uri_str(uri)
     if isinstance(count, str):
         count = count.lower() == "true"
     if isinstance(return_empty_types, str):
@@ -405,7 +481,19 @@ def get_supported_types(
     print(f"==>  uri={uri}, count={count}, return_empty_types={return_empty_types}")
     return GetSupportedTypes(
         uri=uri,
-        count_objects=count,
-        return_empty_types=return_empty_types,
+        countObjects=count,
+        returnEmptyTypes=return_empty_types,
         scope=get_scope(scope),
     )
+
+
+#  __________________
+# /_____/_____/_____/
+
+
+if __name__ == "__main__":
+    print(get_any_array([1, 2, 3, 4, 5]))
+    print(get_any_array(np.array([[1.52, 2, 3], [4, 5, 6]])))
+    print(get_any_array(np.array([["1.52", "2", "3"], ["4", "5", "6"]])))
+    print(get_any_array(np.array([True, False, True])))
+    # print(get_any_array(np.array([b"hello", b"world"])))

@@ -3,7 +3,6 @@
 ## SPDX-License-Identifier: Apache-2.0
 ##
 ---
-
 name: Publish test-pypi
 
 on:
@@ -11,6 +10,8 @@ on:
     branches:
       - main
   pull_request:
+  release:
+    types: [published]
 
 jobs:
   build-and-publish:
@@ -21,7 +22,7 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch the entire history to avoid shallow repository issues
+          fetch-depth: 0 # Fetch the entire history to avoid shallow repository issues
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v4
@@ -39,7 +40,7 @@ jobs:
       - name: 📦 Install poetry
         uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: '2.1.1'
+          poetry-version: "2.1.1"
 
       - name: 📦 Install poetry-dynamic-versioning
         run: poetry self add "poetry-dynamic-versioning[plugin]"
@@ -56,5 +57,4 @@ jobs:
         run: poetry build
 
       - name: 🚀 Publish to PyPI
-        run: 
-          poetry publish --repository test-pypi
+        run: poetry publish --repository test-pypi

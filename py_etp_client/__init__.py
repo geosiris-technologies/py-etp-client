@@ -30,6 +30,10 @@ from etptypes.energistics.etp.v12.datatypes.any_array_type import AnyArrayType
 from etptypes.energistics.etp.v12.datatypes.array_of_boolean import (
     ArrayOfBoolean,
 )
+from etptypes.energistics.etp.v12.datatypes.any_logical_array_type import (
+    AnyLogicalArrayType,
+)
+
 from etptypes.energistics.etp.v12.datatypes.array_of_bytes import ArrayOfBytes
 from etptypes.energistics.etp.v12.datatypes.array_of_double import (
     ArrayOfDouble,
@@ -110,6 +114,10 @@ from etptypes.energistics.etp.v12.protocol.data_array.put_uninitialized_data_arr
 from etptypes.energistics.etp.v12.protocol.data_array.put_uninitialized_data_arrays_response import (
     PutUninitializedDataArraysResponse,
 )
+from etptypes.energistics.etp.v12.datatypes.data_array_types.put_uninitialized_data_array_type import (
+    PutUninitializedDataArrayType,
+)
+
 from etptypes.energistics.etp.v12.protocol.dataspace.delete_dataspaces import (
     DeleteDataspaces,
 )
@@ -128,6 +136,9 @@ from etptypes.energistics.etp.v12.protocol.dataspace.put_dataspaces import (
 from etptypes.energistics.etp.v12.protocol.dataspace.put_dataspaces_response import (
     PutDataspacesResponse,
 )
+from etptypes.energistics.etp.v12.datatypes.data_array_types.put_data_subarrays_type import (
+    PutDataSubarraysType,
+)
 from etptypes.energistics.etp.v12.protocol.discovery.get_deleted_resources import (
     GetDeletedResources,
 )
@@ -139,6 +150,9 @@ from etptypes.energistics.etp.v12.protocol.discovery.get_resources import (
 )
 from etptypes.energistics.etp.v12.protocol.discovery.get_resources_response import (
     GetResourcesResponse,
+)
+from etptypes.energistics.etp.v12.protocol.discovery.get_resources_edges_response import (
+    GetResourcesEdgesResponse,
 )
 from etptypes.energistics.etp.v12.protocol.store.delete_data_objects import (
     DeleteDataObjects,

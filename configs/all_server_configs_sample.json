@@ -1,0 +1,187 @@
+{
+    "configs": {
+        "a6030585-a740-44cc-820b-6ee9612cbb9c": {
+            "_id": "a6030585-a740-44cc-820b-6ee9612cbb9c",
+            "name": "gabbro",
+            "url": "*****",
+            "timeout": 30,
+            "max_message_size": 64,
+            "verify_ssl": false,
+            "auto_reconnect": true,
+            "use_transactions": true,
+            "has_connected_successfully": false,
+            "additional_headers": {
+                "data-partition-id": "opendes"
+            },
+            "acl_owners": [
+                "data.default.owners@opendes.dataservices.energy"
+            ],
+            "acl_viewers": [
+                "data.default.viewers@opendes.dataservices.energy"
+            ],
+            "legal_tags": [
+                "opendes-public-usa-dataset"
+            ],
+            "data_countries": [
+                "US"
+            ],
+            "access_token": "*****",
+            "token_expires_at": 0.0,
+            "auth_method": "basic",
+            "supported_data_objects": [],
+            "supported_protocols": [],
+            "basic": {
+                "username": "*****",
+                "password": "*****"
+            },
+            "oauth2": {
+                "client_id": "",
+                "client_secret": "",
+                "token_url": "",
+                "scope": ""
+            },
+            "azure_ad": {
+                "tenant_id": "",
+                "client_id": "",
+                "client_secret": "",
+                "scope": ""
+            },
+            "aws_cognito": {
+                "user_pool_id": "",
+                "app_client_id": "",
+                "client_secret": "",
+                "aws_region": "",
+                "username": "",
+                "password": ""
+            },
+            "gcp_oauth": {
+                "gcp_project_id": "",
+                "service_account_key": "",
+                "scope": ""
+            },
+            "bearer_token": {
+                "bearer_token": ""
+            }
+        },
+        "12a44ba5-6a83-425e-9664-119a88bf45f7": {
+            "_id": "12a44ba5-6a83-425e-9664-119a88bf45f7",
+            "name": "azure",
+            "max_web_socket_frame_payload_size": 500000000,
+            "max_web_socket_message_payload_size": 500000000,
+            "url": "*****",
+            "timeout": 30,
+            "max_message_size": 64,
+            "verify_ssl": true,
+            "auto_reconnect": true,
+            "use_transactions": true,
+            "has_connected_successfully": false,
+            "additional_headers": {
+                "data-partition-id": "opendes"
+            },
+            "acl_owners": [
+                "data.default.owners@opendes.dataservices.energy"
+            ],
+            "acl_viewers": [
+                "data.default.viewers@opendes.dataservices.energy"
+            ],
+            "legal_tags": [
+                "opendes-public-usa-dataset"
+            ],
+            "data_countries": [
+                "US"
+            ],
+            "access_token": "",
+            "token_expires_at": 0.0,
+            "auth_method": "azure_ad",
+            "supported_data_objects": [],
+            "supported_protocols": [],
+            "basic": {
+                "username": "",
+                "password": ""
+            },
+            "oauth2": {
+                "client_id": "",
+                "client_secret": "",
+                "token_url": "",
+                "scope": ""
+            },
+            "azure_ad": {
+                "tenant_id": "*****",
+                "client_id": "*****",
+                "client_secret": "*****",
+                "scope": "*****"
+            },
+            "aws_cognito": {
+                "user_pool_id": "",
+                "app_client_id": "",
+                "client_secret": "",
+                "aws_region": "",
+                "username": "",
+                "password": ""
+            },
+            "gcp_oauth": {
+                "gcp_project_id": "",
+                "service_account_key": "",
+                "scope": ""
+            },
+            "bearer_token": {
+                "bearer_token": ""
+            }
+        },
+        "80ee6339-c7e6-4c63-9aa2-a2a7be23df09": {
+            "_id": "80ee6339-c7e6-4c63-9aa2-a2a7be23df09",
+            "name": "aws pre",
+            "url": "wss://***",
+            "timeout": 30,
+            "max_message_size": 64,
+            "verify_ssl": false,
+            "auto_reconnect": true,
+            "use_transactions": false,
+            "has_connected_successfully": false,
+            "additional_headers": {
+                "data-partition-id": "osdu"
+            },
+            "acl_owners": [],
+            "acl_viewers": [],
+            "legal_tags": [],
+            "data_countries": [],
+            "access_token": "",
+            "token_expires_at": 0.0,
+            "auth_method": "aws_cognito",
+            "supported_data_objects": [],
+            "supported_protocols": [],
+            "basic": {
+                "username": "",
+                "password": ""
+            },
+            "oauth2": {
+                "client_id": "",
+                "client_secret": "",
+                "token_url": "",
+                "scope": ""
+            },
+            "azure_ad": {
+                "tenant_id": "",
+                "client_id": "",
+                "client_secret": "",
+                "scope": ""
+            },
+            "aws_cognito": {
+                "user_pool_id": "*****",
+                "app_client_id": "*****",
+                "client_secret": "*****",
+                "aws_region": "us-east-2",
+                "username": "*****",
+                "password": "*****"
+            },
+            "gcp_oauth": {
+                "gcp_project_id": "",
+                "service_account_key": "",
+                "scope": ""
+            },
+            "bearer_token": {
+                "bearer_token": ""
+            }
+        }
+    }
+}

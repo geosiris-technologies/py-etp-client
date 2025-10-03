@@ -22,38 +22,14 @@ from etpproto.protocols.dataspace import DataspaceHandler
 from energyml.utils.serialization import read_energyml_xml_bytes, serialize_json
 from energyml.utils.introspection import get_obj_uri
 from energyml.utils.uri import parse_uri
-from py_etp_client import (
-    GetDataspacesResponse,
-)
+from py_etp_client import GetDataspacesResponse, ProtocolException
 from etptypes.energistics.etp.v12.datatypes.message_header import (
     MessageHeader,
 )
 
-from py_etp_client.requests import get_dataspaces
-
-
-def start_client() -> ETPClient:
-    config = ETPConfig()
-    client = ETPClient(
-        url=config.URL,
-        spec=ETPConnection(connection_type=ConnectionType.CLIENT),
-        access_token=config.ACCESS_TOKEN,
-        username=config.USERNAME,
-        password=config.PASSWORD,
-        headers=config.ADDITIONAL_HEADERS,
-        verify=True,
-    )
-    client.start()
-
-    start_time = perf_counter()
-    while not client.is_connected() and perf_counter() - start_time < 5:
-        sleep(0.25)
-    if not client.is_connected():
-        logging.info("The ETP session could not be established in 5 seconds.")
-    else:
-        logging.info("Now connected to ETP Server")
-
-    return client
+from py_etp_client.etp_requests import get_dataspaces
+from py_etp_client.utils import pe_as_str
+from py_etp_client.etpclient import start_client
 
 
 def main():
@@ -77,6 +53,12 @@ def main():
     except TimeoutError as e:
         logging.info(f"Error: {e}")
 
+    if not dataspace_list:
+        print("No dataspace found.")
+        return
+    elif isinstance(dataspace_list, ProtocolException):
+        print(pe_as_str(dataspace_list))
+        return
     ds = dataspace_list[0]
     if "default" in ds.uri:
         ds = dataspace_list[1]
