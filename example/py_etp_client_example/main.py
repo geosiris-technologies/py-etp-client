@@ -10,7 +10,7 @@ from time import sleep, perf_counter
 import numpy as np
 
 from py_etp_client.etpclient import ETPClient
-from py_etp_client.etpconfig import ETPConfig
+from py_etp_client.etpconfig import ETPConfig, ServerConfig
 from etpproto.client_info import ClientInfo
 from etpproto.connection import ConnectionType
 from etpproto.connection import (
@@ -32,7 +32,7 @@ from py_etp_client.utils import pe_as_str
 from py_etp_client.etpclient import start_client
 
 
-def main():
+def main_deprecated():
     config = ETPConfig()
 
     short_url = ".".join(config.URL.split(".")[-2:]).split("/")[0] or "localhost"
@@ -73,6 +73,17 @@ def main():
     )
 
     logging.info(f"Resources: {resources}")
+
+    client.close()
+
+
+def main():
+    config = ServerConfig.from_env()
+
+    client = start_client(config)
+    print("Client started")
+
+    print(client.get_dataspaces())
 
     client.close()
 
