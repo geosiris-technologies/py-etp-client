@@ -50,7 +50,7 @@ poetry run client
 ```
 
 
-# Configuration and authetication
+# Configuration and authentication
 You can configure the client with a configuration file (yaml or json) or directly in code.
 You can also use different authentication methods : 
 - Basic authentication (username and password)
