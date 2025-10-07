@@ -63,16 +63,6 @@ from py_etp_client.etp_requests import default_request_session
 from py_etp_client.auth import AuthConfig, BasicAuthConfig, TokenManager
 from py_etp_client import CloseSession
 
-# To enable handlers
-from py_etp_client.serverprotocols import (
-    CoreProtocolPrinter,
-    DiscoveryProtocolPrinter,
-    DataspaceHandlerPrinter,
-    StoreProtocolPrinter,
-    DataArrayHandlerPrinter,
-    SupportedTypesProtocolPrinter,
-    TransactionHandlerPrinter,
-)
 
 MSG_ID_LOGGER = logging.getLogger("MSG_ID_LOGGER")
 

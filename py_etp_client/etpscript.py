@@ -459,6 +459,16 @@ def transfert_data(
 
 
 if __name__ == "__main__":
+    # To enable handlers
+    from py_etp_client.serverprotocols import (
+        CoreProtocolPrinter,
+        DiscoveryProtocolPrinter,
+        DataspaceHandlerPrinter,
+        StoreProtocolPrinter,
+        DataArrayHandlerPrinter,
+        SupportedTypesProtocolPrinter,
+        TransactionHandlerPrinter,
+    )
 
     logging.basicConfig(level=logging.DEBUG, filename="logs/etpscript.log", filemode="w")
 
@@ -489,6 +499,17 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__2":
+    # To enable handlers
+    from py_etp_client.serverprotocols import (
+        CoreProtocolPrinter,
+        DiscoveryProtocolPrinter,
+        DataspaceHandlerPrinter,
+        StoreProtocolPrinter,
+        DataArrayHandlerPrinter,
+        SupportedTypesProtocolPrinter,
+        TransactionHandlerPrinter,
+    )
+
     logging.basicConfig(level=logging.DEBUG, filename="logs/etpscript.log", filemode="w")
 
     etp_client_source = start_client()

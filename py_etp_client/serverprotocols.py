@@ -65,7 +65,7 @@ from etpproto.error import NotSupportedError
 from etpproto.messages import Message
 from etptypes.energistics.etp.v12.datatypes.message_header import MessageHeader
 
-from etpproto.connection import CommunicationProtocol, Protocol, ETPConnection
+from etpproto.connection import ETPConnection
 from etpproto.client_info import ClientInfo
 
 from etpproto.protocols.core import CoreHandler
@@ -75,6 +75,9 @@ from etpproto.protocols.data_array import DataArrayHandler
 from etpproto.protocols.supported_types import SupportedTypesHandler
 from etpproto.protocols.dataspace import DataspaceHandler
 from etpproto.protocols.transaction import TransactionHandler
+
+# from etpproto.protocols.discovery_query import DiscoveryQueryHandler
+# from etpproto.protocols.
 
 
 pretty_p = pprint.PrettyPrinter(width=100, compact=True)
@@ -105,31 +108,34 @@ def log(*args, pretty: bool = False, **kwargs):
 
 
 def print_resource(res: Resource):
-    log("Resource : %s", res.uri)
-    log("\tSource count : %s", res.source_count)
-    log("\tTarget count : %s", res.target_count)
-    # log("\tLast change :", datetime.fromtimestamp(res.last_changed))
+    if __ENABLE__LOGS__:
+        log("Resource : %s", res.uri)
+        log("\tSource count : %s", res.source_count)
+        log("\tTarget count : %s", res.target_count)
+        # log("\tLast change :", datetime.fromtimestamp(res.last_changed))
 
 
 def print_dataspace(res: Dataspace):
-    log("Dataspace : %s", res.uri)
-    log("\tStore last write : %s", res.store_last_write)
-    log("\tStore created : %s", res.store_created)
-    log("\tPath : %s", res.path)
-    log("\ttCustom data : %s", res.custom_data)
-    # log("\tLast change :", datetime.fromtimestamp(res.last_changed))
+    if __ENABLE__LOGS__:
+        log("Dataspace : %s", res.uri)
+        log("\tStore last write : %s", res.store_last_write)
+        log("\tStore created : %s", res.store_created)
+        log("\tPath : %s", res.path)
+        log("\ttCustom data : %s", res.custom_data)
+        # log("\tLast change :", datetime.fromtimestamp(res.last_changed))
 
 
 def print_protocol_exception(pe: ProtocolException):
-    if pe.error is not None:
-        log("Error recieved : " + str(pe))
-    elif len(pe.errors) > 0:
-        log(f"Errors recieved ({pe.errors}): ")
-        for code, err in pe.errors.items():
-            log(f"\t{code}) {str(err)}")
+    if __ENABLE__LOGS__:
+        if pe.error is not None:
+            log("Error recieved : " + str(pe))
+        elif len(pe.errors) > 0:
+            log(f"Errors recieved ({pe.errors}): ")
+            for code, err in pe.errors.items():
+                log(f"\t{code}) {str(err)}")
 
 
-@ETPConnection.on(CommunicationProtocol.CORE)
+@ETPConnection.on()
 class CoreProtocolPrinter(CoreHandler):
 
     async def on_open_session(
@@ -206,7 +212,7 @@ class CoreProtocolPrinter(CoreHandler):
 #                                        /____/
 
 
-@ETPConnection.on(CommunicationProtocol.DISCOVERY)
+@ETPConnection.on()
 class DiscoveryProtocolPrinter(DiscoveryHandler):
     async def on_get_resources_response(
         self,
@@ -274,7 +280,7 @@ class DiscoveryProtocolPrinter(DiscoveryHandler):
 #                           /_/
 
 
-@ETPConnection.on(CommunicationProtocol.DATASPACE)
+@ETPConnection.on()
 class DataspaceHandlerPrinter(DataspaceHandler):
     async def on_delete_dataspaces(
         self,
@@ -354,7 +360,7 @@ class DataspaceHandlerPrinter(DataspaceHandler):
 # /____/\__/\____/_/   \___/  /_/   /_/   \____/\__/\____/\___/\____/_/
 
 
-@ETPConnection.on(CommunicationProtocol.STORE)
+@ETPConnection.on()
 class StoreProtocolPrinter(StoreHandler):
     async def on_get_data_objects(
         self,
@@ -444,7 +450,7 @@ class StoreProtocolPrinter(StoreHandler):
 #                                              /____/
 
 
-@ETPConnection.on(CommunicationProtocol.DATA_ARRAY)
+@ETPConnection.on()
 class DataArrayHandlerPrinter(DataArrayHandler):
     # hsdsbridge: HSDSBridge = HSDSBridge('alwyn')
 
@@ -538,7 +544,7 @@ class DataArrayHandlerPrinter(DataArrayHandler):
 #           /_/   /_/                                    /____/_/
 
 
-@ETPConnection.on(CommunicationProtocol.SUPPORTED_TYPES)
+@ETPConnection.on()
 class SupportedTypesProtocolPrinter(SupportedTypesHandler):
 
     async def on_get_supported_types(
@@ -577,17 +583,15 @@ class SupportedTypesProtocolPrinter(SupportedTypesHandler):
 # /_/ /_/   \__,_/_/ /_/____/\__,_/\___/\__/_/\____/_/ /_/
 
 
-@ETPConnection.on(CommunicationProtocol.TRANSACTION)
+@ETPConnection.on()
 class TransactionHandlerPrinter(TransactionHandler):
-    # async def on_commit_transaction(
-    #     self,
-    #     msg: CommitTransaction,
-    #     msg_header: MessageHeader,
-    #     client_info: Union[None, ClientInfo] = None,
-    # ) -> AsyncGenerator[Optional[Message], None]:
-    #     yield NotSupportedError().to_etp_message(
-    #         correlation_id=msg_header.message_id
-    #     )
+    async def on_commit_transaction(
+        self,
+        msg: CommitTransaction,
+        msg_header: MessageHeader,
+        client_info: Union[None, ClientInfo] = None,
+    ) -> AsyncGenerator[Optional[Message], None]:
+        yield
 
     async def on_commit_transaction_response(
         self,
@@ -598,15 +602,13 @@ class TransactionHandlerPrinter(TransactionHandler):
         log("@on_commit_transaction_response")
         yield
 
-    # async def on_rollback_transaction(
-    #     self,
-    #     msg: RollbackTransaction,
-    #     msg_header: MessageHeader,
-    #     client_info: Union[None, ClientInfo] = None,
-    # ) -> AsyncGenerator[Optional[Message], None]:
-    #     yield NotSupportedError().to_etp_message(
-    #         correlation_id=msg_header.message_id
-    #     )
+    async def on_rollback_transaction(
+        self,
+        msg: RollbackTransaction,
+        msg_header: MessageHeader,
+        client_info: Union[None, ClientInfo] = None,
+    ) -> AsyncGenerator[Optional[Message], None]:
+        yield
 
     async def on_rollback_transaction_response(
         self,
@@ -617,15 +619,13 @@ class TransactionHandlerPrinter(TransactionHandler):
         log("@on_rollback_transaction_response")
         yield
 
-    # async def on_start_transaction(
-    #     self,
-    #     msg: StartTransaction,
-    #     msg_header: MessageHeader,
-    #     client_info: Union[None, ClientInfo] = None,
-    # ) -> AsyncGenerator[Optional[Message], None]:
-    #     yield NotSupportedError().to_etp_message(
-    #         correlation_id=msg_header.message_id
-    #     )
+    async def on_start_transaction(
+        self,
+        msg: StartTransaction,
+        msg_header: MessageHeader,
+        client_info: Union[None, ClientInfo] = None,
+    ) -> AsyncGenerator[Optional[Message], None]:
+        yield
 
     async def on_start_transaction_response(
         self,
@@ -771,8 +771,3 @@ def computeCapability(supportedProtocolList_fun) -> ServerCapabilities:
             contactEmail="valentin.gauthier@geosiris.com",
         ),
     )
-
-
-if __name__ == "__main__":
-    for v in CommunicationProtocol:
-        print(v)
