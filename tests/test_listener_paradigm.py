@@ -11,9 +11,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "py_etp_client"))
 
+from py_etp_client.serverprotocols import *  # noqa: E402
 from py_etp_client.etpsimpleclient import ETPSimpleClient, EventType  # noqa: E402
-
-from py_etp_client.serverprotocols import *
 
 
 def test_listener_paradigm():
