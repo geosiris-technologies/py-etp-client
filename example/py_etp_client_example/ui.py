@@ -593,4 +593,15 @@ def looper():
 
 if __name__ == "__main__":
 
+    from py_etp_client.serverprotocols import (
+        CoreProtocolPrinter,
+        DiscoveryProtocolPrinter,
+        DataspaceHandlerPrinter,
+        StoreProtocolPrinter,
+        DataArrayHandlerPrinter,
+        SupportedTypesProtocolPrinter,
+        TransactionHandlerPrinter,
+        enable_logs,
+    )
+
     looper()
