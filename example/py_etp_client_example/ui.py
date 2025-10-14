@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import sys
 import traceback
 from typing import Optional, Union
 from time import sleep, perf_counter
@@ -78,18 +79,22 @@ def start_client(config: Optional[Union[ETPConfig, ServerConfig]] = None, verify
     return client
 
 
-def looper():
+def looper(args):
     """A simple looper to keep the script running."""
     # config = ETPConfig()
     # log_file_path = "logs/" + (".".join(config.URL.split(".")[-2:]).split("/")[0] or "localhost") + "_ui.log"  # type: ignore
-    config = ServerConfig.from_file()
-    log_file_path = "logs/" + (".".join(config.url.split(".")[-2:]).split("/")[0] or "localhost") + "_ui.log"  # type: ignore
 
+    config = get_config(args[0] if len(args) > 0 else None)
+
+    # Configure logging if enabled
+    log_file_path = "logs/" + (".".join(config.url.split(".")[-2:]).split("/")[0] or "localhost") + "_ui.log"  # type: ignore
     print(f"Log file is : {log_file_path}")
+    logging.getLogger().handlers.clear()  # Clear existing handlers
     logging.basicConfig(
-        filename=f"{log_file_path}",
-        # level=logging.INFO,
+        filename=log_file_path,
         level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        # handlers=[logging.FileHandler(log_file_path), logging.StreamHandler()],
     )
 
     client = start_client(config)
@@ -409,12 +414,12 @@ def looper():
                     print(
                         f"uri: {uri}, path_in_resource: {path_in_resource}, dimensions: {dimensions}, array_flat: {array_flat}"
                     )
+                    dimensions = tuple(int(d) for d in dimensions.split(","))
 
-                    resp = client.put_data_array(
+                    resp = client.put_data_array_safe(
                         uri=uri,
                         path_in_resource=path_in_resource,
-                        dimensions=[int(d) for d in dimensions.split(",")],
-                        array_flat=[float(a) for a in array_flat.split(",")],
+                        array=np.array([int(d) for d in array_flat.split(",")]).reshape(dimensions),
                         timeout=600,
                     )
                 if len(args) >= 3:
@@ -427,11 +432,11 @@ def looper():
                             data = np.array(json_data)
 
                         if data is not None:
-                            resp = client.put_data_array(
+                            resp = client.put_data_array_safe(
                                 uri=args[0],
                                 path_in_resource=args[1],
-                                array_flat=data,
-                                dimensions=list(data.shape),
+                                array=data,
+                                # dimensions=list(data.shape),
                                 timeout=600,
                             )
                             if resp:
@@ -469,11 +474,11 @@ def looper():
                                                 print(
                                                     f"\t{ds} : {type(dataset[...])} -- {dataset.shape} {type(dataset.shape)} {len(dataset)}"  # type: ignore
                                                 )
-                                                resp = client.put_data_array(
+                                                resp = client.put_data_array_safe(
                                                     uri=str(dataspace_uri),
                                                     path_in_resource=ds,
-                                                    array_flat=dataset[...],  # type: ignore
-                                                    dimensions=dataset.shape,  # type: ignore
+                                                    array=dataset[...],  # type: ignore
+                                                    # dimensions=dataset.shape,  # type: ignore
                                                     timeout=600,
                                                 )
                                                 if resp:
@@ -593,4 +598,15 @@ def looper():
 
 if __name__ == "__main__":
 
-    looper()
+    from py_etp_client.serverprotocols import (
+        CoreProtocolPrinter,
+        DiscoveryProtocolPrinter,
+        DataspaceHandlerPrinter,
+        StoreProtocolPrinter,
+        DataArrayHandlerPrinter,
+        SupportedTypesProtocolPrinter,
+        TransactionHandlerPrinter,
+        enable_logs,
+    )
+
+    looper(args=sys.argv[1:])

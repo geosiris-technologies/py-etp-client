@@ -50,7 +50,7 @@ poetry run client
 ```
 
 
-# Configuration and authetication
+# Configuration and authentication
 You can configure the client with a configuration file (yaml or json) or directly in code.
 You can also use different authentication methods : 
 - Basic authentication (username and password)
@@ -72,6 +72,7 @@ These environment variables configure the ETP server connection and behavior:
 | `SERVER__ID` | Unique identifier for the server configuration |
 | `SERVER_NAME` | Human-readable name for the server configuration |
 | `SERVER_URL` | ETP server URL (including protocol and port) |
+| `SERVER_URL_REST` | ETP server REST API URL (including protocol and port) |
 | `SERVER_TIMEOUT` | Connection timeout in seconds |
 | `SERVER_MAX_WEB_SOCKET_FRAME_PAYLOAD_SIZE` | Maximum WebSocket frame payload size in bytes |
 | `SERVER_MAX_WEB_SOCKET_MESSAGE_PAYLOAD_SIZE` | Maximum WebSocket message payload size in bytes |
