@@ -1467,7 +1467,9 @@ class ETPClient(ETPSimpleClient):
         return False, None
 
 
-def start_client(config: Optional[Union[ServerConfig, ETPConfig]] = None, verify: Optional[bool] = None, timeout = 5) -> ETPClient:
+def start_client(
+    config: Optional[Union[ServerConfig, ETPConfig]] = None, verify: Optional[bool] = None, timeout=5
+) -> ETPClient:
     config = config or ServerConfig.from_file()
 
     if isinstance(config, ETPConfig):
