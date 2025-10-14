@@ -1467,7 +1467,7 @@ class ETPClient(ETPSimpleClient):
         return False, None
 
 
-def start_client(config: Optional[Union[ServerConfig, ETPConfig]] = None, verify: Optional[bool] = None) -> ETPClient:
+def start_client(config: Optional[Union[ServerConfig, ETPConfig]] = None, verify: Optional[bool] = None, timeout = 5) -> ETPClient:
     config = config or ServerConfig.from_file()
 
     if isinstance(config, ETPConfig):
@@ -1482,10 +1482,10 @@ def start_client(config: Optional[Union[ServerConfig, ETPConfig]] = None, verify
     client.start()
 
     start_time = perf_counter()
-    while not client.is_connected() and perf_counter() - start_time < 5:
+    while not client.is_connected() and perf_counter() - start_time < timeout:
         sleep(0.25)
     if not client.is_connected():
-        logging.info("The ETP session could not be established in 5 seconds.")
+        logging.info(f"The ETP session could not be established in {timeout} seconds.")
         raise Exception(f"Connexion not established with {config.url}")
     else:
         logging.info("Now connected to ETP Server")
