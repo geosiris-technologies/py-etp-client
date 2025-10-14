@@ -167,6 +167,28 @@ class EnvironmentSettable:
 
         return instance
 
+    def _load_env(self, override: bool = False):
+        """Load configuration from environment variables if set."""
+
+        for field_name in self._field_names_list():
+            if override or getattr(self, field_name) in (None, "", 0, 0.0):
+                env_var = f"{self._env_var_prefix()}{field_name.upper()}"
+                if env_var in os.environ:
+                    attr_type = self.__dataclass_fields__[field_name].type
+                    if attr_type == bool:
+                        setattr(self, field_name, os.environ[env_var].lower() in ("1", "true", "yes", "on"))
+                    elif is_primitive(attr_type):
+                        setattr(self, field_name, attr_type(os.environ[env_var]))
+                    else:
+                        setattr(self, field_name, json.loads(os.environ[env_var]))
+
+        for f_set in self._field_settable():
+            f_o = getattr(self, f_set.name)
+            if f_o is not None and hasattr(f_o, "_load_env"):
+                f_o._load_env(override=override)
+
+        return self
+
     @classmethod
     def list_env_vars(cls):
         """List relevant environment variables for this config."""

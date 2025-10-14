@@ -263,7 +263,7 @@ class ETPSimpleClient:
             self.headers = (
                 self.headers.update(config.additional_headers or {})
                 if self.headers
-                else config.additional_headers or {}
+                else config.additional_headers.copy() if config.additional_headers else {}
             )
             logging.debug(f"\n\nWebSocket Headers: {self.headers}")
             self.access_token = self.token_manager.get_token(config)
@@ -284,7 +284,9 @@ class ETPSimpleClient:
         self._init_connection(config)
 
         # SSL
-        if isinstance(self.verify, bool) and not self.verify:
+        if (isinstance(self.verify, bool) and not self.verify) or (
+            config is not None and config.verify_ssl is not None and not config.verify_ssl
+        ):
             self.sslopt = {"cert_reqs": ssl.CERT_NONE}
 
     def _init_connection(self, config: Optional[Union[ServerConfig, AuthConfig]] = None) -> None:

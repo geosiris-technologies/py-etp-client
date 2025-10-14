@@ -25,6 +25,7 @@ from etptypes.energistics.etp.v12.datatypes.data_array_types.get_data_subarrays_
 from etptypes.energistics.etp.v12.datatypes.data_array_types.data_array_metadata import (
     DataArrayMetadata,
 )
+from etptypes.energistics.etp.v12.datatypes.endpoint_capability_kind import EndpointCapabilityKind
 from etptypes.energistics.etp.v12.datatypes.any_array import AnyArray
 from etptypes.energistics.etp.v12.datatypes.any_array_type import AnyArrayType
 from etptypes.energistics.etp.v12.datatypes.array_of_boolean import (

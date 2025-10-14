@@ -121,6 +121,7 @@ from py_etp_client import (
     PutUninitializedDataArrays,
     PutUninitializedDataArraysResponse,
     PutUninitializedDataArrayType,
+    EndpointCapabilityKind,
 )
 
 
@@ -269,6 +270,7 @@ class ETPClient(ETPSimpleClient):
         )
 
         self.active_transaction = None
+        self.config = config
 
     def start_and_wait_connected(self, timeout: int = 10) -> bool:
         """Start the client and wait until connected or timeout.
@@ -378,6 +380,26 @@ class ETPClient(ETPSimpleClient):
             else:
                 logging.error("Error: %s", pdm.body)
         return res
+
+    def put_dataspaces_with_acl_from_config(
+        self, dataspace_names: T_UriSingleOrGrouped, config: Optional[ServerConfig] = None, timeout: int = 5
+    ) -> Union[Dict[str, Any], ProtocolException]:
+
+        if config is None and self.config is None:
+            raise ValueError("No config provided")
+        elif config is None:
+            config = self.config if isinstance(self.config, ServerConfig) else None
+            if config is None:
+                raise ValueError("No valid ServerConfig provided")
+
+        return self.put_dataspaces_with_acl(
+            dataspace_names=dataspace_names,
+            acl_owners=config.acl_owners,
+            acl_viewers=config.acl_viewers,
+            legal_tags=config.legal_tags,
+            other_relevant_data_countries=config.data_countries,
+            timeout=timeout,
+        )
 
     def put_dataspaces_with_acl(
         self,
@@ -1115,7 +1137,7 @@ class ETPClient(ETPSimpleClient):
         total_size_bytes = array.nbytes
         max_msg_size = (
             max_subarray_size
-            or self.spec.client_info.getCapability("MaxWebSocketMessagePayloadSize")  # type: ignore
+            or self.spec.client_info.getCapability(EndpointCapabilityKind.MAX_WEB_SOCKET_FRAME_PAYLOAD_SIZE.value)  # type: ignore
             or 1048576
         )  # 1 MB by default
         logging.info(f"Array size: {total_size_bytes} bytes, Max message size: {max_msg_size} bytes")
@@ -1233,7 +1255,7 @@ class ETPClient(ETPSimpleClient):
         total_size_bytes = type_size * np.prod(dimensions)
         max_msg_size = (
             max_subarray_size
-            or self.spec.client_info.getCapability("MaxWebSocketMessagePayloadSize")  # type: ignore
+            or self.spec.client_info.getCapability(EndpointCapabilityKind.MAX_WEB_SOCKET_FRAME_PAYLOAD_SIZE.value)  # type: ignore
             or 1048576
         )  # 1 MB by default
         logging.info(f"Array size: {total_size_bytes} bytes, Max message size: {max_msg_size} bytes")
