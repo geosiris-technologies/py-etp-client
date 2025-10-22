@@ -185,7 +185,9 @@ class ETPStorage(EnergymlWorkspace):
 
     CACHED_URIS: Optional[Dict[str, List[str]]]
 
-    def __init__(self, client: "ETPClient", dataspace: Optional[str] = None, use_cache: bool = True):  # noqa: F821
+    def __init__(
+        self, client: "ETPClient", dataspace: Optional[str] = None, use_cache: bool = True, default_timeout: int = 30
+    ):  # noqa: F821
         """
         Initialize ETP storage with a client.
 
@@ -196,6 +198,7 @@ class ETPStorage(EnergymlWorkspace):
         self.dataspace = dataspace
         self.CACHED_URIS = {} if use_cache else None
         self.use_cache = use_cache
+        self.default_timeout = default_timeout
 
     def get_object(self, uri: Union[str, ETPUri]) -> Optional[Any]:
         """
@@ -207,7 +210,7 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             The deserialized energyml object, or None if not found or on error
         """
-        result = self.client.get_data_object_as_obj(uri, format_="xml")
+        result = self.client.get_data_object_as_obj(uri, format_="xml", timeout=self.default_timeout)
         return result if not isinstance(result, Exception) else None
 
     def put_object(self, obj: Any, dataspace: Optional[str] = None) -> Optional[str]:
@@ -221,8 +224,8 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             The URI of the added object if successful, None otherwise
         """
-        result = self.client.put_data_object_obj(obj, dataspace or self.dataspace)
-        return list(crs_uri_dict.values())[0] if len(result) > 0 else None
+        result = self.client.put_data_object_obj(obj, dataspace or self.dataspace, timeout=self.default_timeout)
+        return str(get_obj_uri(obj, self.dataspace)) if len(result) > 0 else None
 
     def delete_object(self, uri: Union[str, ETPUri]) -> bool:
         """
@@ -234,8 +237,8 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             True if the deletion was successful
         """
-        result = self.client.delete_data_object(uri)
-        return len(result) > 0 and all(result.values())
+        result = self.client.delete_data_object(uri, timeout=self.default_timeout)
+        return len(result) > 0
 
     def get_array(self, uri: Union[str, ETPUri], path_in_resource: str) -> Optional[np.ndarray]:
         """
@@ -248,7 +251,7 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             The data array as a numpy array, or None if not found
         """
-        return self.client.get_data_array_safe(uri, path_in_resource)
+        return self.client.get_data_array_safe(uri, path_in_resource, timeout=self.default_timeout)
 
     def put_array(
         self,
@@ -267,7 +270,7 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             True if the array was successfully stored
         """
-        result = self.client.put_data_array_safe(uri, path_in_resource, array)
+        result = self.client.put_data_array_safe(uri, path_in_resource, array, timeout=self.default_timeout)
         return result is not None and len(result) > 0
 
     def list_objects(self, dataspace: Optional[str] = None) -> List[str]:
@@ -284,7 +287,7 @@ class ETPStorage(EnergymlWorkspace):
         if dataspace is None:
             dataspace = self.dataspace
 
-        resources = self.client.get_resources(uri=dataspace, depth=1)
+        resources = self.client.get_resources(uri=dataspace, depth=1, timeout=self.default_timeout)
         uris = [r.uri for r in resources if hasattr(r, "uri")]
 
         if self.use_cache:
@@ -300,15 +303,15 @@ class ETPStorage(EnergymlWorkspace):
 
     def start_transaction(self):
         """Start a transaction on the ETP client."""
-        self.client.start_transaction(self.dataspace)
+        self.client.start_transaction(self.dataspace, timeout=self.default_timeout)
 
     def commit_transaction(self) -> Tuple[bool, Optional[str]]:
         """Commit the current transaction on the ETP client."""
-        return self.client.commit_transaction_get_msg()
+        return self.client.commit_transaction_get_msg(timeout=self.default_timeout)
 
     def rollback_transaction(self):
         """Rollback the current transaction on the ETP client."""
-        self.client.rollback_transaction()
+        self.client.rollback_transaction(timeout=self.default_timeout)
 
 
 class EPCStorage(EnergymlWorkspace):
