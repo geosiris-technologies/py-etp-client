@@ -920,14 +920,14 @@ xsdata = {version = ">=24.0,<25.0", extras = ["lxml"]}
 
 [[package]]
 name = "energyml-utils"
-version = "1.9.2.dev4"
+version = "1.9.2.dev5"
 description = "Energyml helper"
 optional = false
 python-versions = ">=3.9,<4.0"
 groups = ["main"]
 files = [
-    {file = "energyml_utils-1.9.2.dev4-py3-none-any.whl", hash = "sha256:414191102466bf3d2fc574e08ca1a94f45c5e5e003c633020ce38b9eb8dc45b0"},
-    {file = "energyml_utils-1.9.2.dev4.tar.gz", hash = "sha256:30fc3d0afaa12afa8d01c66dc0c63a360da9fc888a59eacd3055d6a846158b42"},
+    {file = "energyml_utils-1.9.2.dev5-py3-none-any.whl", hash = "sha256:a09fae5a478bce1553deede963714b9f9d7d4055e26410869817da7efce546f6"},
+    {file = "energyml_utils-1.9.2.dev5.tar.gz", hash = "sha256:9fccfcb34ada16dd65c56218a0daee6424632bac5970ed32d9a3516e0e1d03ab"},
 ]
 
 [package.dependencies]

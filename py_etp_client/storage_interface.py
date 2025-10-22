@@ -40,7 +40,7 @@ Example Usage:
 from abc import ABC, abstractmethod
 import re
 import shutil
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from energyml.utils.uri import Uri as ETPUri, parse_uri
 from energyml.utils.introspection import get_obj_identifier, get_obj_uri
@@ -162,9 +162,9 @@ class EnergymlWorkspace(ABC):
         pass
 
     @abstractmethod
-    def commit_transaction(self):
+    def commit_transaction(self) -> Tuple[bool, Optional[str]]:
         """Commit the current transaction if supported by the storage backend."""
-        pass
+        return False, "Not implemented"
 
     @abstractmethod
     def rollback_transaction(self):
@@ -302,9 +302,9 @@ class ETPStorage(EnergymlWorkspace):
         """Start a transaction on the ETP client."""
         self.client.start_transaction(self.dataspace)
 
-    def commit_transaction(self):
+    def commit_transaction(self) -> Tuple[bool, Optional[str]]:
         """Commit the current transaction on the ETP client."""
-        self.client.commit_transaction()
+        return self.client.commit_transaction_get_msg()
 
     def rollback_transaction(self):
         """Rollback the current transaction on the ETP client."""
@@ -465,9 +465,13 @@ class EPCStorage(EnergymlWorkspace):
         """EPC storage does not support transactions."""
         pass
 
-    def commit_transaction(self):
+    def commit_transaction(self) -> Tuple[bool, Optional[str]]:
         """EPC storage does not support transactions."""
-        self.save(self.epc.epc_file_path)
+        try:
+            self.save(self.epc.epc_file_path)
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
     def rollback_transaction(self):
         """EPC storage does not support transactions."""
@@ -651,9 +655,13 @@ class EPCStreamStorage(EnergymlWorkspace):
         """EPC storage does not support transactions."""
         pass
 
-    def commit_transaction(self):
+    def commit_transaction(self) -> Tuple[bool, Optional[str]]:
         """EPC storage does not support transactions."""
-        self.save(self.stream_reader.epc_file_path)
+        try:
+            self.save(self.stream_reader.epc_file_path)
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
     def rollback_transaction(self):
         """EPC storage does not support transactions."""
