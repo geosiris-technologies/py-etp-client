@@ -185,7 +185,7 @@ class ETPStorage(EnergymlWorkspace):
 
     CACHED_URIS: Optional[Dict[str, List[str]]]
 
-    def __init__(self, client: "ETPClient", dataspace: str = None, use_cache: bool = True):  # noqa: F821
+    def __init__(self, client: "ETPClient", dataspace: Optional[str] = None, use_cache: bool = True):  # noqa: F821
         """
         Initialize ETP storage with a client.
 
@@ -290,7 +290,7 @@ class ETPStorage(EnergymlWorkspace):
         if self.use_cache:
             if self.CACHED_URIS is None:
                 self.CACHED_URIS = {}
-            self.CACHED_URIS[dataspace] = uris
+            self.CACHED_URIS[dataspace or ""] = uris
 
         return uris
 
