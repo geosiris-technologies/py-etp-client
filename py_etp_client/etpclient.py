@@ -733,7 +733,7 @@ class ETPClient(ETPSimpleClient):
         return res
 
     def put_data_object_obj(
-        self, obj: Union[Any, List[Any]], dataspace_name: str, format_: str = "xml", timeout: int = 5
+        self, obj: Union[Any, List[Any]], dataspace_name: Optional[str], format_: str = "xml", timeout: int = 5
     ) -> Dict[str, Any]:
         """Put data object to the server.
 

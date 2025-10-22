@@ -78,7 +78,7 @@ class EnergymlWorkspace(ABC):
         pass
 
     @abstractmethod
-    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> bool:
+    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> Optional[str]:
         """
         Store an energyml object.
 
@@ -87,7 +87,7 @@ class EnergymlWorkspace(ABC):
             dataspace: Optional dataspace name (used for ETP storage)
 
         Returns:
-            True if successful, False otherwise
+            The URI of the added object if successful, None otherwise
         """
         pass
 
@@ -210,7 +210,7 @@ class ETPStorage(EnergymlWorkspace):
         result = self.client.get_data_object_as_obj(uri, format_="xml")
         return result if not isinstance(result, Exception) else None
 
-    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> bool:
+    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> Optional[str]:
         """
         Store an object on the ETP server.
 
@@ -219,10 +219,10 @@ class ETPStorage(EnergymlWorkspace):
             dataspace: The dataspace name (defaults to empty string)
 
         Returns:
-            True if at least one object was successfully stored
+            The URI of the added object if successful, None otherwise
         """
-        result = self.client.put_data_object_obj(obj, dataspace or "")
-        return len(result) > 0
+        result = self.client.put_data_object_obj(obj, dataspace or self.dataspace)
+        return list(crs_uri_dict.values())[0] if len(result) > 0 else None
 
     def delete_object(self, uri: Union[str, ETPUri]) -> bool:
         """
@@ -343,7 +343,7 @@ class EPCStorage(EnergymlWorkspace):
         """
         return self.epc.get_object_by_identifier(str(uri))
 
-    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> bool:
+    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> Optional[str]:
         """
         Add an object to the EPC file.
 
@@ -354,12 +354,14 @@ class EPCStorage(EnergymlWorkspace):
             dataspace: Ignored for EPC storage
 
         Returns:
-            True if successful, False otherwise
+            The URI of the added object if successful, None otherwise
         """
         try:
-            return self.epc.add_object(obj)
+            if self.epc.add_object(obj):
+                uri = get_obj_uri(obj)
+                return str(uri) if uri else None
         except Exception:
-            return False
+            return None
 
     def delete_object(self, uri: Union[str, ETPUri]) -> bool:
         """
@@ -517,7 +519,7 @@ class EPCStreamStorage(EnergymlWorkspace):
         # Determine if input is a URI or identifier
         return self.stream_reader.get_object_by_identifier(uri)
 
-    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> bool:
+    def put_object(self, obj: Any, dataspace: Optional[str] = None) -> Optional[str]:
         """
         Add an object to the EPC stream.
 
@@ -528,12 +530,14 @@ class EPCStreamStorage(EnergymlWorkspace):
             dataspace: Ignored for EPC storage
 
         Returns:
-            True if successful, False otherwise
+            The URI of the added object if successful, None otherwise
         """
         try:
-            return self.stream_reader.add_object(obj) is not None
+            if self.stream_reader.add_object(obj) is not None:
+                uri = get_obj_uri(obj)
+                return str(uri) if uri else None
         except Exception:
-            return False
+            return None
 
     def delete_object(self, uri: Union[str, ETPUri]) -> bool:
         """
