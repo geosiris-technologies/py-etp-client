@@ -210,7 +210,11 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             The deserialized energyml object, or None if not found or on error
         """
-        result = self.client.get_data_object_as_obj(uri, format_="xml", timeout=self.default_timeout)
+        _uri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
+        if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
+            _uri.dataspace = self.dataspace
+
+        result = self.client.get_data_object_as_obj(_uri, format_="xml", timeout=self.default_timeout)
         return result if not isinstance(result, Exception) else None
 
     def put_object(self, obj: Any, dataspace: Optional[str] = None) -> Optional[str]:
@@ -237,7 +241,12 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             True if the deletion was successful
         """
-        result = self.client.delete_data_object(uri, timeout=self.default_timeout)
+        _uri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
+
+        if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
+            _uri.dataspace = self.dataspace
+
+        result = self.client.delete_data_object(_uri, timeout=self.default_timeout)
         return len(result) > 0
 
     def get_array(self, uri: Union[str, ETPUri], path_in_resource: str) -> Optional[np.ndarray]:
@@ -251,7 +260,12 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             The data array as a numpy array, or None if not found
         """
-        return self.client.get_data_array_safe(uri, path_in_resource, timeout=self.default_timeout)
+        _uri: ETPUri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
+
+        if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
+            _uri.dataspace = self.dataspace
+
+        return self.client.get_data_array_safe(_uri, path_in_resource, timeout=self.default_timeout)
 
     def put_array(
         self,
@@ -270,7 +284,12 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             True if the array was successfully stored
         """
-        result = self.client.put_data_array_safe(uri, path_in_resource, array, timeout=self.default_timeout)
+        _uri: ETPUri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
+
+        if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
+            _uri.dataspace = self.dataspace
+
+        result = self.client.put_data_array_safe(_uri, path_in_resource, array, timeout=self.default_timeout)
         return result is not None and len(result) > 0
 
     def list_objects(self, dataspace: Optional[str] = None) -> List[str]:
