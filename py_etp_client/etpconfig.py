@@ -94,6 +94,9 @@ class ServerConfig(AuthConfigs, EnvironmentSettable):
     _id: str = field(default="", metadata={"description": "Unique identifier for the server configuration"})
     name: str = field(default="", metadata={"description": "Human-readable name for the server configuration"})
     url: str = field(default="", metadata={"description": "ETP server URL (including protocol and port)"})
+    url_rest: str = field(
+        default="", metadata={"description": "ETP server REST API URL (including protocol and port)"}
+    )
     timeout: int = field(default=30, metadata={"description": "Connection timeout in seconds"})
     max_web_socket_frame_payload_size: int = field(
         default=900000, metadata={"description": "Maximum WebSocket frame payload size in bytes"}
@@ -127,66 +130,7 @@ class ServerConfig(AuthConfigs, EnvironmentSettable):
         if not self._id or len(self._id) == 0:
             self._id = gen_uuid()
 
-        # logging.debug(f"Initialized ServerConfig with id: {self._id}")
-        # logging.debug(f"ServerConfig details: {self.to_dict()}")
-
-        # Use environment variables if values are not provided
-        self.name = self.name or os.getenv("SERVER_NAME", "")
-        self.url = self.url or os.getenv("URL", "localhost")
-        self.timeout = self.timeout if self.timeout is not None else int(os.getenv("TIMEOUT", 30))
-        self.max_web_socket_frame_payload_size = (
-            self.max_web_socket_frame_payload_size
-            if self.max_web_socket_frame_payload_size is not None
-            else int(os.getenv("MAX_WEB_SOCKET_FRAME_PAYLOAD_SIZE", 900000))
-        )
-        self.max_web_socket_message_payload_size = (
-            self.max_web_socket_message_payload_size
-            if self.max_web_socket_message_payload_size is not None
-            else int(os.getenv("MAX_WEB_SOCKET_MESSAGE_PAYLOAD_SIZE", 900000))
-        )
-        self.verify_ssl = (
-            self.verify_ssl if self.verify_ssl is not None else os.getenv("VERIFY_SSL", "false").lower() == "true"
-        )
-        self.auto_reconnect = (
-            self.auto_reconnect
-            if self.auto_reconnect is not None
-            else os.getenv("AUTO_RECONNECT", "true").lower() == "true"
-        )
-        self.use_transactions = (
-            self.use_transactions
-            if self.use_transactions is not None
-            else os.getenv("USE_TRANSACTIONS", "false").lower() == "true"
-        )
-        self.token_expires_at = (
-            self.token_expires_at if self.token_expires_at is not None else float(os.getenv("TOKEN_EXPIRES_AT", 0.0))
-        )
-
-        # List and dict fields from env (expecting JSON or comma-separated)
-        def parse_env_list(var, default):
-            val = os.getenv(var)
-            if val is None:
-                return default
-            try:
-                return json.loads(val)
-            except Exception:
-                return [v.strip() for v in val.split(",") if v.strip()]
-
-        def parse_env_dict(var, default):
-            val = os.getenv(var)
-            if val is None:
-                return default
-            try:
-                return json.loads(val)
-            except Exception:
-                return default
-
-        self.supported_data_objects = self.supported_data_objects or parse_env_list("SUPPORTED_DATA_OBJECTS", [])
-        self.supported_protocols = self.supported_protocols or parse_env_list("SUPPORTED_PROTOCOLS", [])
-        self.additional_headers = self.additional_headers or parse_env_dict("ADDITIONAL_HEADERS", {})
-        self.acl_owners = self.acl_owners or parse_env_list("ACL_OWNERS", [])
-        self.acl_viewers = self.acl_viewers or parse_env_list("ACL_VIEWERS", [])
-        self.legal_tags = self.legal_tags or parse_env_list("LEGAL_TAGS", [])
-        self.data_countries = self.data_countries or parse_env_list("DATA_COUNTRIES", [])
+        self._load_env(override=False)
 
     def to_dict(self) -> Dict:
         d = super().to_dict()

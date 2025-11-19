@@ -459,6 +459,16 @@ def transfert_data(
 
 
 if __name__ == "__main__":
+    # To enable handlers
+    from py_etp_client.serverprotocols import (
+        CoreProtocolPrinter,
+        DiscoveryProtocolPrinter,
+        DataspaceHandlerPrinter,
+        StoreProtocolPrinter,
+        DataArrayHandlerPrinter,
+        SupportedTypesProtocolPrinter,
+        TransactionHandlerPrinter,
+    )
 
     logging.basicConfig(level=logging.DEBUG, filename="logs/etpscript.log", filemode="w")
 
@@ -488,23 +498,34 @@ if __name__ == "__main__":
     )
 
 
-if __name__ == "__main__2":
-    logging.basicConfig(level=logging.DEBUG, filename="logs/etpscript.log", filemode="w")
+# if __name__ == "__main__2":
+#     # To enable handlers
+#     from py_etp_client.serverprotocols import (
+#         CoreProtocolPrinter,
+#         DiscoveryProtocolPrinter,
+#         DataspaceHandlerPrinter,
+#         StoreProtocolPrinter,
+#         DataArrayHandlerPrinter,
+#         SupportedTypesProtocolPrinter,
+#         TransactionHandlerPrinter,
+#     )
 
-    etp_client_source = start_client()
-    # target = Epc()
-    target = Epc(epc_file_path="data/grid-aws-2.epc")
-    # target = Epc(epc_file_path="D:/pyetpclient_tranfert.epc")
+#     logging.basicConfig(level=logging.DEBUG, filename="logs/etpscript.log", filemode="w")
 
-    transfert_data(
-        etp_client_source=etp_client_source,
-        etp_client_target=DataStorage(epc=target),
-        # dataspace_target="default",
-        uris=[
-            # "eml:///dataspace('volve-eqn-plus')/resqml20.obj_PolylineSetRepresentation(38bf3283-9514-43ab-81e3-17080dc5826f)"
-            # "eml:///dataspace('demo/Volve')/resqml20.obj_GridConnectionSetRepresentation(2efbb020-a489-4037-87b0-7204784f7c0c)"
-            "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(3befef85-a866-479a-b41e-ef24036087a0)"  # aws f52
-        ],
-        include_references=True,
-        timeouts=300,
-    )
+#     etp_client_source = start_client()
+#     # target = Epc()
+#     target = Epc(epc_file_path="data/grid-aws-2.epc")
+#     # target = Epc(epc_file_path="D:/pyetpclient_tranfert.epc")
+
+#     transfert_data(
+#         etp_client_source=etp_client_source,
+#         etp_client_target=DataStorage(epc=target),
+#         # dataspace_target="default",
+#         uris=[
+#             # "eml:///dataspace('volve-eqn-plus')/resqml20.obj_PolylineSetRepresentation(38bf3283-9514-43ab-81e3-17080dc5826f)"
+#             # "eml:///dataspace('demo/Volve')/resqml20.obj_GridConnectionSetRepresentation(2efbb020-a489-4037-87b0-7204784f7c0c)"
+#             "eml:///dataspace('demo/Volve')/resqml20.obj_PolylineSetRepresentation(3befef85-a866-479a-b41e-ef24036087a0)"  # aws f52
+#         ],
+#         include_references=True,
+#         timeouts=300,
+#     )

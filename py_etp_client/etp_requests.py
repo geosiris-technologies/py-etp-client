@@ -163,9 +163,9 @@ def default_request_session():
                 lambda sp: sp.protocol != 0,
                 [
                     SupportedProtocol(
-                        protocol=cp.value,
+                        protocol=cp,
                         protocolVersion=etp_version,
-                        role="store" if cp.value != 1 else "producer",
+                        role="store" if cp != 1 else "producer",
                         protocolCapabilities={},
                     )
                     # for cp in CommunicationProtocol
