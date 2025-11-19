@@ -46,6 +46,7 @@ from energyml.utils.uri import Uri as ETPUri, parse_uri
 from energyml.utils.introspection import get_obj_identifier, get_obj_uri
 from energyml.utils.epc import Epc, create_h5_external_relationship
 from energyml.utils.epc_stream import EpcStreamReader
+from energyml.utils.constants import content_type_to_qualified_type
 
 from py_etp_client.etpclient import ETPClient
 
@@ -117,6 +118,23 @@ class EnergymlWorkspace(ABC):
             The data array as a numpy array, or None if not found
         """
         pass
+
+    def read_array(self, proxy: Union[str, ETPUri, Any], path_in_external: str) -> Optional[np.ndarray]:
+        """
+        Get array from HDF5 external file associated with this EPC stream.
+
+        Args:
+            proxy: The URI of the object containing the array reference or the object itself
+            path_in_external: The path within the HDF5 file
+        return self.stream_reader.read_array(proxy, path_in_external)
+        Returns:
+            The data array as a numpy array, or None if not found
+        """
+        if not isinstance(proxy, (str, ETPUri)):
+            uri = get_obj_uri(obj=proxy, dataspace=self.dataspace if hasattr(self, "dataspace") else None)
+        else:
+            uri = proxy
+        return self.get_array(uri, path_in_external)
 
     @abstractmethod
     def put_array(
@@ -213,7 +231,6 @@ class ETPStorage(EnergymlWorkspace):
         _uri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
         if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
             _uri.dataspace = self.dataspace
-
         result = self.client.get_data_object_as_obj(_uri, format_="xml", timeout=self.default_timeout)
         return result if not isinstance(result, Exception) else None
 
@@ -242,10 +259,8 @@ class ETPStorage(EnergymlWorkspace):
             True if the deletion was successful
         """
         _uri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
-
         if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
             _uri.dataspace = self.dataspace
-
         result = self.client.delete_data_object(_uri, timeout=self.default_timeout)
         return len(result) > 0
 
@@ -260,11 +275,9 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             The data array as a numpy array, or None if not found
         """
-        _uri: ETPUri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
-
+        _uri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
         if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
             _uri.dataspace = self.dataspace
-
         return self.client.get_data_array_safe(_uri, path_in_resource, timeout=self.default_timeout)
 
     def put_array(
@@ -284,11 +297,9 @@ class ETPStorage(EnergymlWorkspace):
         Returns:
             True if the array was successfully stored
         """
-        _uri: ETPUri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
-
+        _uri = uri if isinstance(uri, ETPUri) else parse_uri(uri)  # type: ignore
         if _uri is not None and _uri.dataspace is None and self.dataspace is not None:
             _uri.dataspace = self.dataspace
-
         result = self.client.put_data_array_safe(_uri, path_in_resource, array, timeout=self.default_timeout)
         return result is not None and len(result) > 0
 
@@ -644,7 +655,10 @@ class EPCStreamStorage(EnergymlWorkspace):
             List of object URIs
         """
         # Get metadata without loading full objects
-        return [f"eml:///{m.object_type}({m.uuid})" for m in self.stream_reader.list_object_metadata()]
+        return [
+            f"eml:///{content_type_to_qualified_type(m.content_type)}({m.uuid})"
+            for m in self.stream_reader.list_object_metadata()
+        ]
 
     def close(self):
         """
