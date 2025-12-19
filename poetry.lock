@@ -920,14 +920,14 @@ xsdata = {version = ">=24.0,<25.0", extras = ["lxml"]}
 
 [[package]]
 name = "energyml-utils"
-version = "1.9.2"
+version = "1.9.3.dev8"
 description = "Energyml helper"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = ">=3.9,<4.0"
 groups = ["main"]
 files = [
-    {file = "energyml_utils-1.9.2-py3-none-any.whl", hash = "sha256:cc98a7ed97ea59eb1495f29c931d9e29fdfcb675279f6fa0ab00966f8b0df675"},
-    {file = "energyml_utils-1.9.2.tar.gz", hash = "sha256:5b6596acc59d122c37083e21c9cb33fe84fc27a0056340dae6956f3a00bfadc6"},
+    {file = "energyml_utils-1.9.3.dev8-py3-none-any.whl", hash = "sha256:02092eb27d7b6d72a42d075c75ae3d4722313f03f9f65e503d4499154373d3e3"},
+    {file = "energyml_utils-1.9.3.dev8.tar.gz", hash = "sha256:935a5bb6dfe754a44a7ce4443cf93f947f422b9fe6094b51906e218a418285bb"},
 ]
 
 [package.dependencies]
@@ -938,6 +938,11 @@ xsdata = {version = ">=24.0,<25.0", extras = ["cli", "lxml"]}
 [package.extras]
 hdf5 = ["h5py (>=3.7.0,<4.0.0)"]
 parquet = ["numpy (>=1.16.6,<2.0.0)", "pyarrow (>=14.0.1,<15.0.0)"]
+
+[package.source]
+type = "legacy"
+url = "https://test.pypi.org/simple"
+reference = "test-pypi"
 
 [[package]]
 name = "energyml-witsml2-0"
@@ -2450,4 +2455,4 @@ hdf5 = ["h5py"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "d321376f4c3b41ab3dca3dc65f61580d88b2988a355fce49aad0bdfc468be2b5"
+content-hash = "91961c2f09baefce28c12e516f20abc73cfb705e9130b91824f5daf6611b93ca"
