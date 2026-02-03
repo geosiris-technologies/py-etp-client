@@ -42,10 +42,11 @@ import logging
 import re
 import shutil
 from typing import Any, Dict, List, Optional, Tuple, Union
+from energyml.opc.opc import Relationship
 import numpy as np
 from energyml.utils.uri import Uri as ETPUri, parse_uri
 from energyml.utils.introspection import get_obj_identifier, get_obj_uri, get_obj_version, get_obj_title
-from energyml.utils.constants import qualified_type_to_content_type
+from energyml.utils.constants import qualified_type_to_content_type, EPCRelsRelationshipType
 from energyml.utils.epc import Epc, create_h5_external_relationship
 from energyml.utils.epc_stream import EpcStreamReader
 from energyml.utils.constants import content_type_to_qualified_type
@@ -692,6 +693,38 @@ class ETPStorageWorkspace(EnergymlStorageInterface):
             self.CACHE_URIS.setdefault(dataspace or "", []).append(metadata.uri)
 
         return metadata_list
+
+    def get_obj_rels(self, obj: str | ETPUri | Any) -> List[Relationship]:
+        """
+        Get relationships for the specified object.
+
+        Args:
+            obj: The object identifier/URI or the object itself
+        Returns:
+            List of Relationship instances
+        """
+        # Makes a getResources with Sources and Targets to get relationships
+        uri = obj if isinstance(obj, (str, ETPUri)) else get_obj_uri(obj, self.dataspace)
+        obj_sources = self.client.get_resources(uri=uri, depth=0, scope="sources", timeout=self.default_timeout)
+        obj_targets = self.client.get_resources(uri=uri, depth=0, scope="targets", timeout=self.default_timeout)
+        relationships: List[Relationship] = []
+
+        if isinstance(obj_sources, Exception):
+            logging.warning(f"Error retrieving sources for {uri}: {obj_sources}")
+        elif isinstance(obj_sources, list):
+            for res in obj_sources:
+                relationships.append(
+                    Relationship(target=str(res.uri), type_value=EPCRelsRelationshipType.SOURCE_OBJECT.get_type())
+                )
+
+        if isinstance(obj_targets, Exception):
+            logging.warning(f"Error retrieving targets for {uri}: {obj_targets}")
+        elif isinstance(obj_targets, list):
+            for res in obj_targets:
+                relationships.append(
+                    Relationship(target=str(res.uri), type_value=EPCRelsRelationshipType.DESTINATION_OBJECT.get_type())
+                )
+        return relationships
 
     def close(self) -> None:
         """
