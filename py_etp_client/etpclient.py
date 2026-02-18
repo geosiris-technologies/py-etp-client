@@ -872,7 +872,9 @@ class ETPClient(ETPSimpleClient):
         array = None
         for gdar in gdar_msg_list:
             if isinstance(gdar.body, GetDataArraysResponse) and "0" in gdar.body.data_arrays:
-                # print(gdar)
+                print("=" * 40)
+                print(gdar.header)
+                print("=" * 40)
                 if array is None:
                     array = np.array(gdar.body.data_arrays["0"].data.item.values).reshape(  # type: ignore
                         tuple(gdar.body.data_arrays["0"].dimensions)  # type: ignore
